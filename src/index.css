@@ -1,0 +1,645 @@
+/* Priorities, in order: contrast, large touch targets, and clear focus
+   states (a blind or low-vision user relies on voice/screen-reader far
+   more than on how this looks) — but it should still look sharp for
+   sighted users and judges. Don't trade away the first three for polish. */
+
+:root {
+  --color-bg: #0f1117;
+  --color-bg-glow-1: #1c2440;
+  --color-bg-glow-2: #12161f;
+  --color-surface: #1a1d27;
+  --color-surface-2: #232735;
+  --color-border: rgba(255, 255, 255, 0.09);
+  --color-text: #f5f6fa;
+  --color-text-dim: #a7acbe;
+  --color-primary: #6ea8ff;
+  --color-primary-dark: #4f8cf0;
+  --color-primary-text: #06090f;
+  --color-danger: #ff6b6b;
+
+  /* Chart demo palette — also doubles as a small categorical palette
+     for anything else chart-ish you add later. */
+  --chart-1: #6ea8ff;
+  --chart-2: #ff9f6e;
+  --chart-3: #7ee787;
+  --chart-4: #ffd166;
+  --chart-5: #c792ea;
+
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --shadow-card: 0 16px 40px rgba(0, 0, 0, 0.4);
+
+  font-size: 18px; /* larger base size helps low-vision users */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% -10%, var(--color-bg-glow-1), transparent 55%),
+    radial-gradient(circle at 100% 0%, var(--color-bg-glow-2), transparent 45%),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.app-header {
+  position: relative;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 130px;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--color-primary), transparent);
+}
+
+.app-header-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.15rem;
+}
+
+.app-icon {
+  font-size: 3.4rem;
+  line-height: 1;
+  filter: drop-shadow(0 6px 16px rgba(110, 168, 255, 0.4));
+}
+
+.app-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(110, 168, 255, 0.1);
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.app-header h1 {
+  margin: 0 0 0.4rem;
+  font-size: clamp(2.1rem, 4.5vw, 3.1rem);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #fff, var(--color-primary) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.app-subtitle {
+  color: var(--color-text-dim);
+  margin: 0;
+  max-width: 46ch;
+  font-size: 1.05rem;
+}
+
+/* Two-panel layout: chart controls take the lead spot, chat sits as a
+   narrower, always-visible panel docked to the far right. Stacks on
+   narrow screens. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: linear-gradient(180deg, var(--color-surface), var(--color-surface) 60%, var(--color-surface-2));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+}
+
+.panel-title {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim);
+}
+
+/* Buttons: large tap targets (min 44px per accessibility guidelines),
+   strong focus outline so keyboard/switch users can see where they are. */
+button {
+  font-size: 1rem;
+  min-height: 44px;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  color: var(--color-primary-text);
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(110, 168, 255, 0.28);
+}
+
+.primary-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(110, 168, 255, 0.38);
+}
+
+.secondary-btn {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+  margin-top: 1rem;
+}
+
+.secondary-btn:not(:disabled):hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.camera-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  align-items: stretch;
+}
+
+.camera-live {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+/* "Choose a photo" and "Try a sample chart" share a card look so the
+   capture screen reads as a set of clear options, not a form. */
+.upload-card,
+.demo-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  min-height: 64px;
+  padding: 0.85rem 1rem;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: left;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.upload-card:hover,
+.demo-card:not(:disabled):hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.upload-card:has(input:focus-visible) {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.upload-icon {
+  font-size: 1.5rem;
+}
+
+.upload-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.95rem;
+}
+
+.upload-card-text strong {
+  font-size: 1rem;
+}
+
+.upload-card-text span:last-child {
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+}
+
+.upload-card input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Static pie chart (see PieChart.jsx) — plain SVG, no image asset or
+   charting library. Small version is a plain icon inside the demo
+   button; the large version (shown once a chart's been analyzed) gets
+   a soft drop shadow and its own percentage labels drawn on the slices. */
+.pie-chart {
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.result-preview .pie-chart {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
+}
+
+.pie-chart-label {
+  font-size: 15px;
+  font-weight: 700;
+  fill: #10131c;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.6);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+video {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.error-text {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.result-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 1rem 0;
+}
+
+.preview-img {
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.analyzing-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  color: var(--color-text-dim);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- Chat panel ----
+   Docked to the far right of the layout (see .layout) and kept
+   noticeably smaller/denser than the chart panel next to it. */
+
+.chat-panel-section {
+  padding: 1.1rem;
+  font-size: 0.92rem;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  height: 100%;
+}
+
+.messages-list {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  min-height: 220px;
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.messages-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 8px;
+}
+
+.message {
+  display: flex;
+  animation: message-in 0.18s ease-out;
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.message-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-width: 85%;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-md);
+  line-height: 1.45;
+}
+
+.message-role {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+}
+
+.message-assistant {
+  justify-content: flex-start;
+}
+
+.message-assistant .message-bubble {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-top-left-radius: 4px;
+}
+
+.message-user {
+  justify-content: flex-end;
+}
+
+.message-user .message-bubble {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  color: var(--color-primary-text);
+  border-top-right-radius: 4px;
+}
+
+.message-user .message-role {
+  opacity: 0.75;
+}
+
+/* A new chart drops in as a clickable "suggested question" rather than
+   dumping the answer straight into the chat — the description only
+   appears once the student actually asks it. */
+.message-suggestion {
+  justify-content: flex-start;
+}
+
+.suggestion-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  max-width: 90%;
+  min-height: auto;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px dashed var(--color-primary);
+  border-radius: var(--radius-md);
+  background: rgba(110, 168, 255, 0.1);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.suggestion-chip:hover {
+  background: rgba(110, 168, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.suggestion-chip .message-role {
+  color: var(--color-primary);
+  opacity: 0.9;
+}
+
+.message-bubble-thinking {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.thinking-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+  animation: bounce 1s infinite ease-in-out;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/* Quick summary / Full detail toggle, shown near the top of the chat
+   once there's a chart to describe. */
+.depth-toggle {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.depth-btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: var(--color-surface-2);
+  color: var(--color-text-dim);
+  border-color: var(--color-border);
+}
+
+.depth-btn-active {
+  background: rgba(110, 168, 255, 0.16);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Stop speaking / Repeat / Copy transcript / rate — grouped as a small
+   toolbar between the transcript and the input row. Kept compact since
+   the chat panel itself is narrow. */
+.chat-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.control-btn {
+  min-height: 38px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.82rem;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.control-btn:not(:disabled):hover {
+  border-color: var(--color-primary);
+}
+
+.copy-confirmation {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--chart-3);
+}
+
+.rate-control {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: 100%;
+}
+
+.rate-btn {
+  flex: 1;
+  min-height: 36px;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.78rem;
+  background: var(--color-surface-2);
+  color: var(--color-text-dim);
+  border-color: var(--color-border);
+}
+
+.rate-btn-active {
+  background: rgba(110, 168, 255, 0.16);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.chat-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chat-input-row input[type='text'] {
+  flex: 1 1 200px;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.chat-input-row input[type='text']::placeholder {
+  color: var(--color-text-dim);
+}
+
+.mic-btn {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.mic-btn:not(:disabled):hover {
+  border-color: var(--color-primary);
+}
+
+.mic-active {
+  background: var(--color-danger);
+  color: white;
+  border-color: var(--color-danger);
+}
+
+/* Visually hides an element but keeps it available to screen readers —
+   standard accessible pattern for labels you don't want shown visually. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
