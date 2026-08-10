@@ -78,3 +78,6 @@ or `ChatPanel.jsx` at all when you swap it in.
   to check.
 
 
+## How to run the Fast API Backend:
+- Go to project location and at the folder:/DiagramReader/diagram-reader/packages/back-end
+- Run this command: .venv/bin/uvicorn app.main:app --reload
