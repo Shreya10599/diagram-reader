@@ -61,9 +61,9 @@ export async function askQuestion(question, structuredData) {
 }
 ```
 
-**Important:** get your backend teammate to look at the shape documented
-at the top of `mockApi.js` in the first hour of the hackathon. As long as
-their real responses match that shape, you won't need to touch `App.jsx`
+**Important:** look at the shape documented
+at the top of `mockApi.js`. As long as
+the real responses match that shape, you won't need to touch `App.jsx`
 or `ChatPanel.jsx` at all when you swap it in.
 
 ## If something breaks
@@ -77,13 +77,4 @@ or `ChatPanel.jsx` at all when you swap it in.
 - **`npm install` fails**: make sure you're on Node 18+. Run `node -v`
   to check.
 
-## Suggested build order (given a ~24-36hr hackathon)
 
-1. Get the mock flow running end-to-end first (you already have this —
-   just run `npm run dev` and try it).
-2. Test the camera flow on an actual phone early — this is the part
-   most likely to surprise you.
-3. Once the backend has a real `/analyze-chart` endpoint, swap it in
-   and test with a real photographed chart.
-4. Polish the voice loop last — it's the most "wow factor" for judges
-   but least likely to block the core demo if it's rough.
