@@ -478,6 +478,20 @@ video {
   opacity: 0.9;
 }
 
+/* Low-confidence extraction warning — reuses the existing amber chart
+   accent (--chart-4) rather than adding a new color, but visually breaks
+   from the normal assistant bubble so it reads as distinct even at a
+   glance, on top of being spoken/announced separately via aria-live. */
+.message-caveat .message-bubble {
+  background: rgba(255, 209, 102, 0.12);
+  border: 1px solid var(--chart-4);
+}
+
+.message-caveat .message-role {
+  color: var(--chart-4);
+  opacity: 1;
+}
+
 .message-bubble-thinking {
   flex-direction: row;
   align-items: center;

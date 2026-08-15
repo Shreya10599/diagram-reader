@@ -105,15 +105,11 @@ export default function CameraCapture({
 
       {hasResult ? (
         <div className="result-preview">
-          {capturedImage === 'DEMO_PIE' ? (
-            <PieChart series={DEMO_PIE_SERIES} size={240} showLabels />
-          ) : (
-            <img
-              src={capturedImage}
-              alt="The chart you captured or uploaded"
-              className="preview-img"
-            />
-          )}
+          <img
+            src={capturedImage}
+            alt="The chart you captured, uploaded, or generated via the sample-chart demo"
+            className="preview-img"
+          />
           <button onClick={onReset} className="secondary-btn">
             Try another chart
           </button>
