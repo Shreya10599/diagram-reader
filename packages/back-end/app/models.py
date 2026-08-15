@@ -72,3 +72,19 @@ class AnalyzeChartResponse(BaseModel):
     shortDescription: str
     structuredData: StructuredData
     computedAnswer: Optional[ComputedAnswer] = None
+
+
+class SeriesCorrection(BaseModel):
+    label: str
+    value: float
+
+
+class VerificationResult(BaseModel):
+    """Verdict from the verification pass: does the re-rendered chart match
+    the original, and if not, what specific values should be corrected? This
+    is the branch point that lets Claude — not the calling code — decide
+    whether the extraction loop continues and what it fixes next."""
+
+    match: bool
+    corrections: list[SeriesCorrection] = []
+    notes: str = ""

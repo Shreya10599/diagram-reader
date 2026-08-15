@@ -7,20 +7,41 @@ from typing import Optional
 from anthropic import Anthropic
 from fastapi import HTTPException
 
-from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL
-from .models import AnalyzeChartRequest, AnalyzeChartResponse, ChartTask
+from .chart_render import render_chart_image
+from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_VERIFICATION_ROUNDS
+from .models import (
+    AnalyzeChartRequest,
+    AnalyzeChartResponse,
+    ChartTask,
+    SeriesCorrection,
+    SeriesPoint,
+    StructuredData,
+    VerificationResult,
+)
 
 logger = logging.getLogger("diagram_reader")
 
 _client: Optional[Anthropic] = None
 
 
+class StepLogger:
+    """Per-request, monotonic step counter so every backend action is logged
+    in a consistent format — 'Step N: <action> : <status>' — that both a
+    human and a screen reader can follow as the pipeline runs."""
+
+    def __init__(self) -> None:
+        self._step = 0
+
+    def log(self, action: str, status: str) -> None:
+        self._step += 1
+        logger.info("Step %d: %s : %s", self._step, action, status)
+
+
 # ---- Extraction prompt -----------------------------------------------------------
 # Encodes the axis-calibration + self-check procedure discussed in planning:
 # anchor to labeled gridlines before reading values, rather than estimating
-# proportionally from bar/slice size by eye. This is a single-pass version;
-# a second, separate verification call (compare extracted table back against
-# the image) is the next step, not yet implemented here.
+# proportionally from bar/slice size by eye. This is the FIRST pass of the
+# loop; the verification pass below re-checks its output against the image.
 
 
 EXTRACTION_SYSTEM_PROMPT = """You are a precise chart-reading assistant. You extract exact \
@@ -99,6 +120,52 @@ cannot read the chart at all, set structuredData.series to an empty list and exp
 "description"."""
 
 
+# ---- Verification prompt ----------------------------------------------------------
+# The branch point of the loop: Claude sees the original image AND a chart
+# re-rendered from the extracted table, and decides (a) whether they match and
+# (b) which specific values to correct if they don't. Nothing about whether to
+# continue is hard-coded — it follows from the corrections Claude reports.
+
+
+VERIFICATION_SYSTEM_PROMPT = """You are the verification pass of a chart-data extraction \
+pipeline.
+
+You are shown TWO images:
+1. The ORIGINAL chart the user photographed or uploaded.
+2. A RE-RENDERED chart drawn from the values a previous pass extracted from the original.
+
+Compare them carefully, point by point. The re-rendered chart is drawn directly from a table \
+of (label, value) pairs, so if that table was accurate the two charts should look the same. \
+You are also given that table as text.
+
+Your job is to decide whether the re-rendered chart faithfully reproduces the original, and \
+if it does not, to correct the specific values that are wrong.
+
+Rules:
+- Compare every data point (bar height / line position / slice angle) against the axis scale \
+visible in the original. A scale mismatch (e.g. the original maxes out at 100 but the \
+re-render maxes at 40) usually means the extracted scale was wrong — correct every value you \
+can read in that case.
+- Only report corrections for points you are confident are wrong. Do not guess, and do not \
+"improve" values that actually match.
+- If the two charts match, return "match": true with an empty "corrections" array.
+- If some values differ, return "match": false and list the corrected value for each \
+mismatched point only.
+
+Respond with ONLY a single JSON object (no markdown fences, no commentary outside the JSON), \
+matching exactly this shape:
+
+{
+  "match": true | false,
+  "corrections": [ { "label": "<series label>", "value": <number> }, ... ],
+  "notes": "<short summary of what matched or what was corrected, or empty string>"
+}
+
+"value" must always be a plain number. Labels in "corrections" must exactly match the labels \
+in the provided table (case-sensitive) — if you don't recognize a label, leave it out rather \
+than guessing."""
+
+
 def get_client() -> Anthropic:
     """Lazy singleton so /health works even with no API key set yet."""
     global _client
@@ -159,13 +226,15 @@ def _extract_json(raw_text: str) -> dict:
         )
 
 
-def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
-    """Runs the full Claude Vision extraction pipeline for a chart request:
-    validates the image data URL, calls the model, parses the JSON response,
-    and validates it against the response schema."""
-    media_type, base64_data = _parse_image_data_url(payload.image)
-    client = get_client()
-
+def _run_extraction(
+    steps: StepLogger,
+    client: Anthropic,
+    media_type: str,
+    base64_data: str,
+    task: Optional[ChartTask],
+) -> AnalyzeChartResponse:
+    """First pass of the loop: the single Claude Vision extraction call."""
+    action = "First-pass extraction (Claude Vision)"
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
@@ -195,7 +264,7 @@ def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
                         },
                         {
                             "type": "text",
-                            "text": _build_user_instruction(payload.task),
+                            "text": _build_user_instruction(task),
                         },
                     ],
                 }
@@ -211,6 +280,7 @@ def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
             }
         )
     except Exception as exc:
+        steps.log(action, f"FAILED (Claude API call: {exc})")
         logger.exception("Claude API call failed")
         raise HTTPException(status_code=502, detail=f"Claude API call failed: {exc}")
 
@@ -219,6 +289,7 @@ def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
         # confusing "couldn't be parsed as JSON" error further down — this
         # is exactly what happened when effort="max" started spending more
         # of the budget on thinking, leaving the JSON cut off mid-output.
+        steps.log(action, "FAILED (response cut off at max_tokens)")
         logger.error("Response hit max_tokens (likely truncated mid-JSON): %s", response)
         raise HTTPException(
             status_code=502,
@@ -229,13 +300,213 @@ def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
     raw_text = "".join(
         block.text for block in response.content if getattr(block, "type", None) == "text"
     )
-    parsed = _extract_json(raw_text)
+    try:
+        parsed = _extract_json(raw_text)
+    except HTTPException as exc:
+        steps.log(action, "FAILED (response not valid JSON)")
+        raise
 
     try:
-        return AnalyzeChartResponse(**parsed)
+        result = AnalyzeChartResponse(**parsed)
     except Exception as exc:
+        steps.log(action, f"FAILED (schema mismatch: {exc})")
         logger.error("Claude JSON didn't match expected schema: %s\nParsed: %s", exc, parsed)
         raise HTTPException(
             status_code=502,
             detail=f"Claude's response didn't match the expected schema: {exc}",
         )
+
+    steps.log(action, f"OK ({len(result.structuredData.series)} data point(s))")
+    return result
+
+
+def _run_verification(
+    steps: StepLogger,
+    client: Anthropic,
+    media_type: str,
+    original_b64: str,
+    rendered_b64: str,
+    structured: StructuredData,
+    round_no: int,
+) -> VerificationResult:
+    """Verification pass: show Claude the original image alongside a chart
+    re-rendered from the extracted table, and let it report whether they
+    match and what to correct. Its corrections drive the loop — not a fixed
+    number of re-extractions."""
+    action = f"Verification pass (round {round_no})"
+    table = "\n".join(f"{p.label}: {p.value}" for p in structured.series)
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=2000,
+            thinking={"type": "adaptive"},
+            system=VERIFICATION_SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": original_b64,
+                            },
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": rendered_b64,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": f"Current extracted table:\n{table}",
+                        },
+                    ],
+                }
+            ],
+            output_config={"effort": "low"},
+        )
+    except Exception as exc:
+        steps.log(action, f"FAILED (Claude API call: {exc})")
+        logger.exception("Verification Claude call failed")
+        raise HTTPException(status_code=502, detail=f"Verification call failed: {exc}")
+
+    if response.stop_reason == "max_tokens":
+        steps.log(action, "FAILED (response cut off at max_tokens)")
+        logger.error("Verification response hit max_tokens: %s", response)
+        raise HTTPException(
+            status_code=502,
+            detail="Verification response was cut off (hit max_tokens) before finishing.",
+        )
+
+    raw_text = "".join(
+        block.text for block in response.content if getattr(block, "type", None) == "text"
+    )
+    try:
+        parsed = _extract_json(raw_text)
+    except HTTPException as exc:
+        steps.log(action, "FAILED (response not valid JSON)")
+        raise
+
+    try:
+        verdict = VerificationResult(**parsed)
+    except Exception as exc:
+        steps.log(action, f"FAILED (schema mismatch: {exc})")
+        logger.error(
+            "Verification JSON didn't match expected schema: %s\nParsed: %s", exc, parsed
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Verification response didn't match the expected schema: {exc}",
+        )
+
+    if not verdict.corrections:
+        steps.log(action, "MATCH — charts align")
+    else:
+        steps.log(action, f"MISMATCH — {len(verdict.corrections)} correction(s) reported")
+    return verdict
+
+
+def _apply_corrections(
+    steps: StepLogger,
+    structured: StructuredData,
+    corrections: list[SeriesCorrection],
+    round_no: int,
+) -> StructuredData:
+    """Merge Claude's corrections into the extracted table by label
+    (case-insensitive); labels the model invented are ignored."""
+    corrected = {c.label.strip().lower(): c.value for c in corrections}
+    changes = []
+    for point in structured.series:
+        new_value = corrected.get(point.label.strip().lower())
+        if new_value is not None and new_value != point.value:
+            changes.append(f"{point.label}: {point.value} -> {new_value}")
+    updated_series = [
+        SeriesPoint(label=p.label, value=corrected.get(p.label.strip().lower(), p.value))
+        for p in structured.series
+    ]
+
+    if changes:
+        steps.log(
+            f"Applying corrections (round {round_no})",
+            "; ".join(changes),
+        )
+    else:
+        steps.log(f"Applying corrections (round {round_no})", "NO CHANGES — values already match")
+    return structured.model_copy(update={"series": updated_series})
+
+
+def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
+    """Runs the extraction loop for a chart request:
+
+    1. First pass: extract the full table from the image.
+    2. Re-render that table as a chart, show [original, re-render] to Claude,
+       and ask whether they match.
+    3. If Claude reports corrections, apply them and repeat step 2.
+    4. Stop when Claude reports a match, or after MAX_VERIFICATION_ROUNDS.
+
+    Whether to continue — and what to fix — is decided by Claude's output,
+    not by this code.
+    """
+    steps = StepLogger()
+
+    try:
+        media_type, base64_data = _parse_image_data_url(payload.image)
+    except HTTPException as exc:
+        steps.log("Parsing image data URL", f"FAILED ({exc.detail})")
+        raise
+    steps.log("Parsing image data URL", "OK")
+
+    try:
+        client = get_client()
+    except HTTPException as exc:
+        steps.log("Initializing Claude client", f"FAILED ({exc.detail})")
+        raise
+    steps.log("Initializing Claude client", "OK")
+
+    result = _run_extraction(steps, client, media_type, base64_data, payload.task)
+
+    if not result.structuredData.series:
+        steps.log("Validating extracted series", "EMPTY — chart unreadable, skipping verification")
+        return result
+    steps.log(
+        "Validating extracted series",
+        f"OK ({len(result.structuredData.series)} point(s), starting verification)",
+    )
+
+    structured = result.structuredData
+    for round_no in range(1, MAX_VERIFICATION_ROUNDS + 1):
+        try:
+            rendered_url = render_chart_image(structured)
+            _, rendered_b64 = _parse_image_data_url(rendered_url)
+        except Exception as exc:
+            steps.log(
+                f"Rendering extracted chart (round {round_no})",
+                f"SKIPPED ({exc})",
+            )
+            break
+        steps.log(f"Rendering extracted chart (round {round_no})", "OK")
+
+        verdict = _run_verification(
+            steps, client, media_type, base64_data, rendered_b64, structured, round_no
+        )
+
+        if not verdict.corrections:
+            break
+
+        structured = _apply_corrections(steps, structured, verdict.corrections, round_no)
+    else:
+        steps.log(
+            "Verification loop",
+            f"EXHAUSTED {MAX_VERIFICATION_ROUNDS} round(s) without a confirmed match",
+        )
+
+    steps.log(
+        "Returning final result",
+        f"OK ({len(structured.series)} data point(s))",
+    )
+    return result.model_copy(update={"structuredData": structured})
