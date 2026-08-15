@@ -21,6 +21,9 @@ extracted series is printed against the known ground truth at the end.
 
 import argparse
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 parser.add_argument(
@@ -50,7 +53,7 @@ import matplotlib.pyplot as plt
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-from app import llm_agent
+from app.graph import analyze_chart
 from app.models import AnalyzeChartRequest
 
 GROUND_TRUTH = [
@@ -114,7 +117,7 @@ def render_chart() -> str:
 def main():
     image_data_url = render_chart()
     print("=" * 60)
-    result = llm_agent.analyze_chart(AnalyzeChartRequest(image=image_data_url))
+    result = analyze_chart(AnalyzeChartRequest(image=image_data_url))
     print("=" * 60)
 
     truth = {label: value for label, value in GROUND_TRUTH}

@@ -4,6 +4,11 @@ anthropic>=0.40.0
 python-dotenv>=1.0.1
 pydantic>=2.7
 
+# Runtime: the extraction + verification loop is a LangGraph StateGraph
+# (app/graph.py) — nodes, conditional edges, and a nested verification
+# subgraph replace the original hand-rolled loops.
+langgraph>=1.0
+
 # Runtime: the extraction loop re-renders extracted data into a chart image
 # (app/chart_render.py) so the verification pass can compare it against the original.
 matplotlib>=3.8
