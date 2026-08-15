@@ -8,5 +8,9 @@ pydantic>=2.7
 # (app/chart_render.py) so the verification pass can compare it against the original.
 matplotlib>=3.8
 
+# Runtime: the verification agent's zoom_tool crops/upscales regions of the
+# original image so ambiguous points can be re-read (app/tools.py).
+Pillow>=10.0
+
 # Eval-only — not used by the running app itself, just scripts/eval_accuracy.py
 requests>=2.31

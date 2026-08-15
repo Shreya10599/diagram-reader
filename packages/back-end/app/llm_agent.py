@@ -8,7 +8,13 @@ from anthropic import Anthropic
 from fastapi import HTTPException
 
 from .chart_render import render_chart_image
-from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_VERIFICATION_ROUNDS
+from .config import (
+    ANTHROPIC_API_KEY,
+    CLAUDE_MODEL,
+    FORCE_VERIFY_ROUNDS,
+    MAX_TOOL_ROUNDS,
+    MAX_VERIFICATION_ROUNDS,
+)
 from .models import (
     AnalyzeChartRequest,
     AnalyzeChartResponse,
@@ -18,6 +24,7 @@ from .models import (
     StructuredData,
     VerificationResult,
 )
+from .tools import zoom_image
 
 logger = logging.getLogger("diagram_reader")
 
@@ -151,6 +158,12 @@ can read in that case.
 - If the two charts match, return "match": true with an empty "corrections" array.
 - If some values differ, return "match": false and list the corrected value for each \
 mismatched point only.
+- If any part of the chart is hard to read — cut-off axis labels, ambiguous tick marks, \
+crowded data points — you MAY call the provided tools before answering: zoom_tool(region) \
+crops and upscales a region of the original for a closer look, and re_extract_points(labels) \
+re-reads specific points from the original and returns their true values. Using a tool is \
+always optional — YOU decide whether a closer look would change your answer, and how many \
+times to look before finalizing.
 
 Respond with ONLY a single JSON object (no markdown fences, no commentary outside the JSON), \
 matching exactly this shape:
@@ -164,6 +177,72 @@ matching exactly this shape:
 "value" must always be a plain number. Labels in "corrections" must exactly match the labels \
 in the provided table (case-sensitive) — if you don't recognize a label, leave it out rather \
 than guessing."""
+
+
+VERIFICATION_TOOLS = [
+    {
+        "name": "zoom_tool",
+        "description": (
+            "Crop and upscale a region of the original chart image when axis labels or data "
+            "points are ambiguous, cut off, or hard to read. Use before giving your final "
+            "answer if a closer look would help."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "region": {
+                    "type": "string",
+                    "description": (
+                        "Region to zoom into, e.g. 'left half', 'right half', 'top', 'bottom', "
+                        "'center', or a pixel box like 'x:200-400, y:100-300'. Defaults to the "
+                        "whole chart upscaled if not recognized."
+                    ),
+                }
+            },
+            "required": ["region"],
+        },
+    },
+    {
+        "name": "re_extract_points",
+        "description": (
+            "Re-read specific data points from the original chart image and return their true "
+            "values. Use when particular series labels were read incorrectly in the first "
+            "pass. Returns corrected values for the requested labels only."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Series labels whose values should be re-read from the original chart."
+                    ),
+                }
+            },
+            "required": ["labels"],
+        },
+    },
+]
+
+
+REEXTRACT_SYSTEM_PROMPT = """You are a focused chart re-reader. You are shown a chart image \
+and given a list of series labels whose values need re-checking.
+
+Re-read ONLY those specific points from the image. Follow the calibration procedure: anchor \
+to the labeled gridlines before reading any value, and re-measure each requested point \
+against that scale. If you cannot identify a requested point at all, skip it — do not guess \
+its label or value.
+
+Respond with ONLY a single JSON object (no markdown fences, no commentary outside the JSON), \
+matching exactly this shape:
+
+{
+  "points": [ { "label": "<series label>", "value": <number> }, ... ],
+  "notes": "<short summary, or empty string>"
+}
+
+"value" must always be a plain number. Only include labels you were asked to re-read."""
 
 
 def get_client() -> Anthropic:
@@ -320,27 +399,21 @@ def _run_extraction(
     return result
 
 
-def _run_verification(
-    steps: StepLogger,
+def _re_extract_points(
     client: Anthropic,
     media_type: str,
     original_b64: str,
-    rendered_b64: str,
-    structured: StructuredData,
-    round_no: int,
-) -> VerificationResult:
-    """Verification pass: show Claude the original image alongside a chart
-    re-rendered from the extracted table, and let it report whether they
-    match and what to correct. Its corrections drive the loop — not a fixed
-    number of re-extractions."""
-    action = f"Verification pass (round {round_no})"
-    table = "\n".join(f"{p.label}: {p.value}" for p in structured.series)
+    labels: list[str],
+) -> list[dict]:
+    """Executes the re_extract_points tool: a focused Claude call that
+    re-reads only the requested labels from the original image and returns
+    their true values."""
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=2000,
             thinking={"type": "adaptive"},
-            system=VERIFICATION_SYSTEM_PROMPT,
+            system=REEXTRACT_SYSTEM_PROMPT,
             messages=[
                 {
                     "role": "user",
@@ -354,16 +427,8 @@ def _run_verification(
                             },
                         },
                         {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": rendered_b64,
-                            },
-                        },
-                        {
                             "type": "text",
-                            "text": f"Current extracted table:\n{table}",
+                            "text": f"Re-read ONLY these points and report their values: {labels}",
                         },
                     ],
                 }
@@ -371,21 +436,201 @@ def _run_verification(
             output_config={"effort": "low"},
         )
     except Exception as exc:
-        steps.log(action, f"FAILED (Claude API call: {exc})")
-        logger.exception("Verification Claude call failed")
-        raise HTTPException(status_code=502, detail=f"Verification call failed: {exc}")
+        logger.exception("re_extract_points Claude call failed")
+        raise HTTPException(status_code=502, detail=f"re_extract_points call failed: {exc}")
 
     if response.stop_reason == "max_tokens":
-        steps.log(action, "FAILED (response cut off at max_tokens)")
-        logger.error("Verification response hit max_tokens: %s", response)
+        logger.error("re_extract_points response hit max_tokens: %s", response)
         raise HTTPException(
             status_code=502,
-            detail="Verification response was cut off (hit max_tokens) before finishing.",
+            detail="re_extract_points response was cut off (hit max_tokens) before finishing.",
         )
 
     raw_text = "".join(
         block.text for block in response.content if getattr(block, "type", None) == "text"
     )
+    parsed = _extract_json(raw_text)
+
+    points = parsed.get("points")
+    if not isinstance(points, list):
+        logger.error(
+            "re_extract_points response missing 'points' list: %s\nParsed: %s", raw_text, parsed
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="re_extract_points returned an unexpected shape (missing 'points').",
+        )
+    return points
+
+
+def _execute_verification_tool(
+    client: Anthropic,
+    media_type: str,
+    original_b64: str,
+    call,
+) -> tuple[list[dict], str]:
+    """Runs one tool call the verification agent requested and returns
+    (tool_result_content_blocks, human_summary). The summary is logged; the
+    content blocks are fed back to Claude so it can act on the result."""
+    if call.name == "zoom_tool":
+        region = str(call.input.get("region", ""))
+        crop_url = zoom_image(original_b64, region)
+        _, crop_b64 = _parse_image_data_url(crop_url)
+        summary = f"zoom_tool({region!r}) -> 2x PNG crop"
+        return (
+            [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": crop_b64},
+                },
+                {
+                    "type": "text",
+                    "text": "Above is a zoomed/upscaled view of the original chart.",
+                },
+            ],
+            summary,
+        )
+
+    if call.name == "re_extract_points":
+        labels = [str(label) for label in call.input.get("labels", [])]
+        points = _re_extract_points(client, media_type, original_b64, labels)
+        summary = f"re_extract_points({labels}) -> {len(points)} re-read point(s)"
+        return (
+            [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {"points": points},
+                    ),
+                }
+            ],
+            summary,
+        )
+
+    raise HTTPException(status_code=502, detail=f"Unknown tool requested by Claude: {call.name}")
+
+
+def _run_verification(
+    steps: StepLogger,
+    client: Anthropic,
+    media_type: str,
+    original_b64: str,
+    rendered_b64: str,
+    structured: StructuredData,
+    round_no: int,
+) -> VerificationResult:
+    """Verification pass as an agent loop: Claude sees the original image
+    alongside a chart re-rendered from the extracted table, and is given
+    tools (zoom_tool, re_extract_points) so IT decides whether and how to
+    investigate a mismatch before delivering the verdict. The verdict's
+    corrections then drive the outer extraction loop.
+
+    Loop shape:
+      ask Claude -> if it requests a tool, run it, feed the result back, repeat
+      -> stop when Claude answers with the final JSON verdict (or the tool
+      budget runs out). Whether to keep investigating — and how — is Claude's
+      decision, not this code's."""
+    action = f"Verification pass (round {round_no})"
+    table = "\n".join(f"{p.label}: {p.value}" for p in structured.series)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": original_b64,
+                    },
+                },
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": rendered_b64,
+                    },
+                },
+                {
+                    "type": "text",
+                    "text": f"Current extracted table:\n{table}",
+                },
+            ],
+        }
+    ]
+
+    response = None
+    for tool_round in range(1, MAX_TOOL_ROUNDS + 1):
+        try:
+            response = client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=2000,
+                thinking={"type": "adaptive"},
+                system=VERIFICATION_SYSTEM_PROMPT,
+                tools=VERIFICATION_TOOLS,
+                messages=messages,
+                output_config={"effort": "low"},
+            )
+        except Exception as exc:
+            steps.log(action, f"FAILED (Claude API call: {exc})")
+            logger.exception("Verification Claude call failed")
+            raise HTTPException(status_code=502, detail=f"Verification call failed: {exc}")
+
+        if response.stop_reason == "max_tokens":
+            steps.log(action, "FAILED (response cut off at max_tokens)")
+            logger.error("Verification response hit max_tokens: %s", response)
+            raise HTTPException(
+                status_code=502,
+                detail="Verification response was cut off (hit max_tokens) before finishing.",
+            )
+
+        tool_calls = [
+            block for block in response.content if getattr(block, "type", None) == "tool_use"
+        ]
+        if not tool_calls:
+            break
+
+        for call in tool_calls:
+            steps.log(action, f"CALLED tool {call.name}({call.input})")
+            try:
+                content_blocks, summary = _execute_verification_tool(
+                    client, media_type, original_b64, call
+                )
+            except Exception as exc:
+                steps.log(action, f"TOOL {call.name} FAILED ({exc})")
+                content_blocks, summary = (
+                    [{"type": "text", "text": f"Tool {call.name} failed: {exc}"}],
+                    f"tool {call.name} FAILED",
+                )
+            steps.log(action, f"TOOL result {summary}")
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": call.id,
+                            "content": content_blocks,
+                        }
+                    ],
+                }
+            )
+    else:
+        steps.log(action, f"EXHAUSTED tool budget ({MAX_TOOL_ROUNDS} calls) without a verdict")
+
+    if response is None:
+        raise HTTPException(status_code=502, detail="Verification produced no response.")
+
+    raw_text = "".join(
+        block.text for block in response.content if getattr(block, "type", None) == "text"
+    )
+    if not raw_text.strip():
+        steps.log(action, "FAILED (no final JSON text in response)")
+        raise HTTPException(
+            status_code=502,
+            detail="Verification used its tool budget without producing a final answer.",
+        )
     try:
         parsed = _extract_json(raw_text)
     except HTTPException as exc:
@@ -494,6 +739,22 @@ def analyze_chart(payload: AnalyzeChartRequest) -> AnalyzeChartResponse:
         verdict = _run_verification(
             steps, client, media_type, base64_data, rendered_b64, structured, round_no
         )
+
+        # DEBUG override: FORCE_VERIFY_ROUNDS makes early rounds report a
+        # mismatch so the multi-round loop is observable on any chart. Only
+        # active when the env flag is set (default 0 = off).
+        if FORCE_VERIFY_ROUNDS > 0 and round_no < FORCE_VERIFY_ROUNDS:
+            forced_label = structured.series[0].label
+            forced_value = round(structured.series[0].value * 1.1, 2)
+            steps.log(
+                f"Verification pass (round {round_no})",
+                f"FORCED mismatch (debug FORCE_VERIFY_ROUNDS={FORCE_VERIFY_ROUNDS})",
+            )
+            verdict = VerificationResult(
+                match=False,
+                corrections=[SeriesCorrection(label=forced_label, value=forced_value)],
+                notes="forced by FORCE_VERIFY_ROUNDS debug flag",
+            )
 
         if not verdict.corrections:
             break
