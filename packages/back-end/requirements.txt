@@ -1,2 +1,9 @@
-fastapi==0.141.1
+fastapi==0.128.8
 uvicorn[standard]
+anthropic>=0.40.0
+python-dotenv>=1.0.1
+pydantic>=2.7
+
+# Eval-only — not used by the running app itself, just scripts/eval_accuracy.py
+matplotlib>=3.8
+requests>=2.31

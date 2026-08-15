@@ -44,6 +44,8 @@ export default function ChatPanel({
   description,
   shortDescription,
   hasChart,
+  confidence,
+  uncertainValues,
   onAskQuestion,
   isListening,
   transcript,
@@ -91,9 +93,25 @@ export default function ChatPanel({
           shortAnswer: shortDescription,
         },
       ])
+
+      // Confidence is safety-relevant — a blind/low-vision user can't just
+      // glance at the chart to spot-check a number themselves — so this is
+      // surfaced right away, not gated behind tapping the suggested
+      // question the way the description itself is.
+      if (confidence && confidence !== 'high') {
+        const caveat =
+          uncertainValues && uncertainValues.length > 0
+            ? `Heads up — I'm not fully confident about some values in this chart: ${uncertainValues.join(', ')}. You may want to double check those against the original.`
+            : "Heads up — I'm not fully confident about some of the values in this chart. You may want to double check against the original."
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: 'assistant', text: caveat, isCaveat: true },
+        ])
+        speak(caveat)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [description, shortDescription])
+  }, [description, shortDescription, confidence, uncertainValues])
 
   // When speech-to-text finishes, drop the transcript into the input
   // box automatically so the student can see it before it sends.
@@ -242,7 +260,10 @@ export default function ChatPanel({
 
       <div className="messages-list" role="log" aria-live="polite" aria-label="Conversation about the chart">
         {messages.map((msg) => (
-          <div key={msg.id} className={`message message-${msg.role}`}>
+          <div
+            key={msg.id}
+            className={`message message-${msg.role} ${msg.isCaveat ? 'message-caveat' : ''}`}
+          >
             {msg.role === 'suggestion' ? (
               <button
                 type="button"
@@ -255,7 +276,7 @@ export default function ChatPanel({
             ) : (
               <span className="message-bubble">
                 <span className="message-role">
-                  {msg.role === 'assistant' ? 'Assistant' : 'You'}
+                  {msg.isCaveat ? '⚠ Confidence check' : msg.role === 'assistant' ? 'Assistant' : 'You'}
                 </span>
                 {msg.text}
               </span>

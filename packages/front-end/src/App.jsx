@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react'
 import CameraCapture from './components/CameraCapture.jsx'
 import ChatPanel from './components/ChatPanel.jsx'
 import { useSpeech } from './hooks/useSpeech.js'
-import { analyzeChart, analyzeDemoChart, askQuestion } from './mockApi.js'
+import { analyzeChart, askQuestion, DEMO_PIE_SERIES } from './mockApi.js'
+import { generateSampleChartImage } from './utils/sampleChart.js'
 
 /**
  * App — top-level state.
@@ -25,7 +26,7 @@ export default function App() {
   const [description, setDescription] = useState('')
   const [shortDescription, setShortDescription] = useState('')
   const [structuredData, setStructuredData] = useState(null)
-  const [capturedImage, setCapturedImage] = useState(null) // data URL, or 'DEMO_PIE'
+  const [capturedImage, setCapturedImage] = useState(null) // data URL from camera, upload, or the generated sample chart
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   const {
@@ -55,7 +56,10 @@ export default function App() {
         setStructuredData(result.structuredData)
       } catch (err) {
         console.error('Analysis failed:', err)
-        const errorMsg = 'Something went wrong analyzing the image. Try again.'
+        // Surface the real reason (e.g. missing API key, Claude API error,
+        // bad image format) instead of a generic message — makes this
+        // debuggable from the alert alone instead of requiring devtools.
+        const errorMsg = `Something went wrong analyzing the image: ${err.message || err}`
         speak(errorMsg)
         alert(errorMsg)
       } finally {
@@ -75,10 +79,23 @@ export default function App() {
     [runAnalysis, speak]
   )
 
-  const handleDemo = useCallback(
-    () => runAnalysis(() => analyzeDemoChart(), 'DEMO_PIE'),
-    [runAnalysis]
-  )
+  const handleDemo = useCallback(async () => {
+    // Generates a real chart image client-side (see utils/sampleChart.js)
+    // and runs it through the exact same analyzeChart() call a camera
+    // capture or upload would — so "try a sample chart" still exercises
+    // the real Claude pipeline instead of returning canned data. The
+    // generated data URL doubles as the on-screen preview, so what's
+    // shown is exactly what was analyzed.
+    try {
+      const dataUrl = await generateSampleChartImage(DEMO_PIE_SERIES, 'Household Budget')
+      runAnalysis(() => analyzeChart(dataUrl), dataUrl)
+    } catch (err) {
+      console.error('Sample chart generation failed:', err)
+      const errorMsg = 'Could not generate the sample chart. Try again.'
+      speak(errorMsg)
+      alert(errorMsg)
+    }
+  }, [runAnalysis, speak])
 
   const handleAskQuestion = useCallback(
     async (question) => askQuestion(question, structuredData),
@@ -126,6 +143,8 @@ export default function App() {
             description={description}
             shortDescription={shortDescription}
             hasChart={!!structuredData}
+            confidence={structuredData?.confidence}
+            uncertainValues={structuredData?.uncertainValues}
             onAskQuestion={handleAskQuestion}
             isListening={isListening}
             transcript={transcript}
