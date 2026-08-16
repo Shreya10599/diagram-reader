@@ -2,11 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "diagram-reader",
+      "name": "front-end",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--prefix", "packages/front-end"],
       "port": 5173
+    },
+    {
+      "name": "vera-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "packages/vera-frontend"],
+      "port": 5174
     }
   ]
 }
-

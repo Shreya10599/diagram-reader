@@ -1,0 +1,617 @@
+/* VERA — design tokens and component styles.
+   Priorities, in order: contrast, large touch targets, and clear focus
+   states — this app is built for older adults, so nothing here should
+   require precise clicking, small text, or reading dense instructions. */
+
+:root {
+  --paper: #F3F1EA;
+  --panel: #FFFFFF;
+  --panel-sunk: #EDEAE1;
+  --ink: #26211B;
+  --ink-soft: #6B6255;
+  --ink-faint: #9C948C;
+  --line: #E2DDD2;
+  --line-strong: #D0C9BB;
+  --accent: #C2410C;
+  --accent-wash: #FBE7D5;
+  --accent-ink: #7C2D0E;
+  --done: #2F6B3B;
+  --done-wash: #E3F0E4;
+  --done-ink: #1F4A28;
+  --gold: #D9A441;
+  --disabled-bg: #E7E2D6;
+  --disabled-fg: #B0A897;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+
+  /* Fixed brand-mark colors — the logo never changes with theme, same as
+     an app icon wouldn't, so it looks identical everywhere it appears. */
+  --logo-bg: #22201C;
+  --logo-1: #E2825A;
+  --logo-2: #5FB39A;
+  --logo-3: #D9A968;
+
+  font-size: 17px; /* larger base size helps low-vision users */
+}
+
+:root[data-theme="dark"] {
+  --paper: #1C1815;
+  --panel: #262119;
+  --panel-sunk: #211D17;
+  --ink: #F3EFE7;
+  --ink-soft: #C4BBAC;
+  --ink-faint: #8C8375;
+  --line: #3B342A;
+  --line-strong: #4E4636;
+  --accent: #E8804A;
+  --accent-wash: #3D2415;
+  --accent-ink: #F6C9A0;
+  --done: #6FC190;
+  --done-wash: #1E3327;
+  --done-ink: #B7E7C6;
+  --gold: #E8BE6E;
+  --disabled-bg: #2E2A22;
+  --disabled-fg: #6B6355;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1C1815;
+    --panel: #262119;
+    --panel-sunk: #211D17;
+    --ink: #F3EFE7;
+    --ink-soft: #C4BBAC;
+    --ink-faint: #8C8375;
+    --line: #3B342A;
+    --line-strong: #4E4636;
+    --accent: #E8804A;
+    --accent-wash: #3D2415;
+    --accent-ink: #F6C9A0;
+    --done: #6FC190;
+    --done-wash: #1E3327;
+    --done-ink: #B7E7C6;
+    --gold: #E8BE6E;
+    --disabled-bg: #2E2A22;
+    --disabled-fg: #6B6355;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Page shell ---- */
+
+.app-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 6rem;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* ---- The one logo mark, used identically everywhere ---- */
+
+.vera-logo {
+  border-radius: 26%;
+  background: var(--logo-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.vera-logo circle {
+  opacity: 0.88;
+}
+
+/* ---- Landing header + form ---- */
+
+.landing-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 2.25rem;
+  text-align: center;
+}
+.landing-header .vera-logo {
+  width: 84px;
+  height: 84px;
+}
+.landing-title {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.form-panel {
+  max-width: 380px;
+  margin: 0 auto;
+}
+.form-field {
+  margin-bottom: 1.1rem;
+}
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 0.35rem;
+}
+.form-input {
+  width: 100%;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1.5px solid var(--line-strong);
+  border-radius: 9px;
+  padding: 0.65rem 0.8rem;
+  min-height: 44px;
+}
+.form-input::placeholder {
+  color: var(--ink-faint);
+}
+.form-input.is-ai-fill {
+  background: var(--done-wash);
+  border-color: var(--done);
+  color: var(--done-ink);
+}
+.form-input.is-ai-fill::placeholder {
+  color: var(--done-ink);
+  opacity: 0.75;
+}
+.form-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 11.5px;
+  color: var(--done-ink);
+  margin-top: 0.3rem;
+}
+
+/* ---- Floating VERA button ---- */
+
+.fab {
+  position: fixed;
+  right: 1.6rem;
+  bottom: 1.4rem;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 26%, #3a352e, var(--logo-bg) 68%);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18), 0 10px 24px rgba(0, 0, 0, 0.3);
+  z-index: 30;
+}
+
+/* ---- VERA Assistant chat panel ---- */
+
+.vera-panel {
+  position: fixed;
+  right: 1.5rem;
+  top: 1.5rem;
+  bottom: 1.5rem;
+  width: 360px;
+  max-width: calc(100vw - 2rem);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 40;
+}
+@media (max-width: 640px) {
+  .vera-panel {
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+  }
+}
+
+.vera-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--accent);
+  color: #fff;
+  flex-shrink: 0;
+}
+.vera-panel-head-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.vera-panel-head-title .vera-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 24%;
+}
+.vera-panel-head-icons {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.icon-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.vera-body {
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.bubble {
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  background: var(--done-wash);
+  color: var(--ink);
+  align-self: flex-start;
+  max-width: 92%;
+}
+.bubble-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--done-ink);
+  margin-bottom: 0.2rem;
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.option-btn {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 0.7rem 0.75rem;
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: var(--panel);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.option-btn:hover:not(:disabled) {
+  background: var(--accent-wash);
+}
+.option-btn:disabled {
+  opacity: 0.5;
+}
+.option-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-wash);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.option-btn .chev {
+  margin-left: auto;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.progress-card {
+  background: var(--panel-sunk);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 0.95rem;
+}
+.progress-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+.progress-title {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--disabled-bg);
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.progress-pct {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.faq-block {
+  margin-top: 0.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+.faq-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.5rem;
+}
+.faq-row {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 44px;
+}
+.faq-row:first-of-type {
+  border-top: none;
+}
+.faq-row svg {
+  color: var(--ink-faint);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.faq-row[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.faq-answer {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  padding: 0 0 0.6rem;
+  margin: 0;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: none;
+  min-height: 48px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  font-size: 14.5px;
+  padding: 0.8rem 1.4rem;
+}
+.btn-outline {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1.5px solid var(--line-strong);
+  font-size: 14px;
+  padding: 0.7rem 1.2rem;
+}
+.btn-full {
+  width: 100%;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.camera-live {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.camera-live video {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+.error-text {
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ---- About VERA overlay ---- */
+
+.about-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--paper);
+  overflow-y: auto;
+  z-index: 50;
+  padding: 2rem 1.5rem 3rem;
+}
+.about-inner {
+  max-width: 700px;
+  margin: 0 auto;
+}
+.about-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2.25rem;
+}
+.about-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.about-brand .vera-logo {
+  width: 34px;
+  height: 34px;
+}
+.about-brand-name {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.hero {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 2.5rem;
+}
+.hero h1 {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0 0 0.8rem;
+  letter-spacing: -0.01em;
+}
+.hero h1 .accent-text {
+  color: var(--done);
+}
+.hero p {
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.55;
+}
+
+.steps {
+  display: flex;
+  gap: 1rem;
+  position: relative;
+}
+.steps-track {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: 36px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line-strong) 0 6px, transparent 6px 11px);
+  z-index: 0;
+}
+.step-card {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.1rem 1rem;
+  text-align: left;
+  position: relative;
+  z-index: 1;
+}
+.step-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.7rem;
+}
+.step-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 0.3rem;
+}
+.step-body {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  margin: 0;
+}
+.step-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  margin-top: 27px;
+  background: var(--paper);
+  border-radius: 50%;
+}
+@media (max-width: 640px) {
+  .steps {
+    flex-direction: column;
+  }
+  .steps-track,
+  .step-arrow {
+    display: none;
+  }
+}
