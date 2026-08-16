@@ -354,6 +354,9 @@ def _run_extraction(
         logger.exception("Claude API call failed")
         raise HTTPException(status_code=502, detail=f"Claude API call failed: {exc}")
 
+    print("=== RAW FIRST-PASS EXTRACTION RESPONSE ===")
+    print(response.model_dump_json(indent=2))
+
     if response.stop_reason == "max_tokens":
         # Diagnose truncation explicitly instead of letting it surface as a
         # confusing "couldn't be parsed as JSON" error further down — this
