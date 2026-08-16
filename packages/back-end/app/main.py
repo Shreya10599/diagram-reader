@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .llm_agent import analyze_chart
+from .graph import analyze_chart
 from .models import AnalyzeChartRequest, AnalyzeChartResponse
 
 logging.basicConfig(level=logging.INFO)
