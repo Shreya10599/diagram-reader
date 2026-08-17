@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import VeraLogo from './VeraLogo.jsx'
-import { analyzeSource, askQuestion } from '../mockApi.js'
+import { analyzeSource, askQuestion, fillFormFromChart } from '../mockApi.js'
 
 const STEP = {
   OPENED: 'opened',
@@ -11,12 +11,12 @@ const STEP = {
   DONE: 'done',
 }
 
-
 const ASK_OPTIONS = [
   "What's the highest value?",
   "What's the lowest value?",
   'What does this mean for me?',
 ]
+
 const FIELD_LABELS = {
   name: 'Name',
   address: 'Address',
@@ -33,6 +33,7 @@ function describeFilledFields(fieldsObj) {
   if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
   return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
 }
+
 const FAQ = [
   {
     q: 'What file types can I upload?',
@@ -57,6 +58,25 @@ const GREETING = "Hi, I'm VERA. How can I help you today?"
  * anywhere, since this is built for an audience that shouldn't have to
  * type to use it. See mockApi.js for the shape the real backend needs
  * to match.
+ *
+ * Two flows live here, matching App.jsx's two-panel layout — but they're
+ * not fully independent once both a chart and a form are on hand:
+ *  - Chart uploads (picture/photo/link) -> runAnalysis -> POST
+ *    /vera/analyze -> onFilled merges the result into the web form
+ *    (name/address/min/max/average) on the left. Charts can be added one
+ *    after another (STEP.MORE, or "Add another chart" from STEP.READY).
+ *  - "Upload form" -> handlePdfFileChange -> onPdfUploaded hands the raw
+ *    file to PdfPreview on the right.
+ *  - The part that connects them: applyChartsToForm. Every chart that's
+ *    been successfully read this session is remembered (chartSourcesRef);
+ *    the moment BOTH a chart and a form exist — whichever arrives second
+ *    triggers it — each not-yet-applied chart gets sent through POST
+ *    /liheap/fill-form-from-chart against the CURRENT state of the form
+ *    (not the original upload), and the result replaces `pdfUrl`. So
+ *    uploading a second chart after the form's already been filled once
+ *    iterates on top of that same document instead of starting over —
+ *    the backend just reads whatever PDF it's handed and fills in the
+ *    next blank row it finds, income or expenses, decided per chart.
  */
 export default function VeraAssistant({
   isOpen,
@@ -72,6 +92,7 @@ export default function VeraAssistant({
   const [step, setStep] = useState(STEP.OPENED)
   const [messages, setMessages] = useState([{ id: 'm0', text: GREETING }])
   const [progressPct, setProgressPct] = useState(0)
+  const [progressTitle, setProgressTitle] = useState('Reading your chart…')
   const [summary, setSummary] = useState('')
   const [isCameraOn, setIsCameraOn] = useState(false)
   const [openFaq, setOpenFaq] = useState(null)
@@ -83,6 +104,13 @@ export default function VeraAssistant({
   const streamRef = useRef(null)
   const fileInputRef = useRef(null)
   const pdfInputRef = useRef(null)
+  // Every chart source successfully read this session, in order — kept
+  // in a ref (not state) since nothing renders off the list itself, only
+  // off what's been done with it. appliedChartCountRef tracks how many
+  // have already been folded into the current pdfUrl; applyChartsToForm
+  // works through whatever's left each time it runs.
+  const chartSourcesRef = useRef([])
+  const appliedChartCountRef = useRef(0)
 
   const addMessage = useCallback(
     (text) => {
@@ -92,7 +120,8 @@ export default function VeraAssistant({
     },
     [speak]
   )
-    const addImagePreview = useCallback((src) => {
+
+  const addImagePreview = useCallback((src) => {
     const id = `m${idRef.current++}`
     setMessages((prev) => [...prev, { id, image: src }])
   }, [])
@@ -107,10 +136,58 @@ export default function VeraAssistant({
   // closes some other way.
   useEffect(() => () => stopCamera(), [stopCamera])
 
+  // The connective piece: works through every chart in chartSourcesRef
+  // that hasn't been applied to the current form yet, one at a time,
+  // chaining each POST /liheap/fill-form-from-chart's returned PDF into
+  // the next call's `formFile` so the document keeps accumulating instead
+  // of resetting. Called both when a form is uploaded while charts are
+  // already on hand, and when a new chart comes in while a form already
+  // exists.
+  const applyChartsToForm = useCallback(
+    async (startingPdfUrl) => {
+      if (appliedChartCountRef.current >= chartSourcesRef.current.length) return
+      setStep(STEP.PROGRESS)
+      setProgressTitle('Filling in your form…')
+      addMessage("Reading your chart(s) and filling in the form — I'll update you live.")
+      setProgressPct(8)
+
+      const tick = setInterval(() => {
+        setProgressPct((p) => Math.min(p + 6, 92))
+      }, 140)
+
+      let workingPdfUrl = startingPdfUrl
+      let anySucceeded = false
+
+      while (appliedChartCountRef.current < chartSourcesRef.current.length) {
+        const chart = chartSourcesRef.current[appliedChartCountRef.current]
+        try {
+          const result = await fillFormFromChart({ chartImage: chart, formFile: workingPdfUrl })
+          workingPdfUrl = `data:application/pdf;base64,${result.pdfBase64}`
+          onPdfUploaded(workingPdfUrl)
+          addMessage(result.summary)
+          anySucceeded = true
+        } catch (err) {
+          console.error('Form fill failed for one chart:', err)
+          addMessage(
+            err.message || "One of your charts couldn't be matched to this form — leaving it out."
+          )
+        }
+        appliedChartCountRef.current += 1
+      }
+
+      clearInterval(tick)
+      setProgressPct(100)
+      setStep(STEP.READY)
+      if (anySucceeded) addMessage('Your form preview is updated. What would you like to do now?')
+    },
+    [addMessage, onPdfUploaded]
+  )
+
   const runAnalysis = useCallback(
     async (source) => {
       addImagePreview(source)
       setStep(STEP.PROGRESS)
+      setProgressTitle('Reading your chart…')
       addMessage("Working on it — I'll update you live.")
       setProgressPct(8)
 
@@ -120,15 +197,23 @@ export default function VeraAssistant({
         setProgressPct((p) => Math.min(p + 7, 92))
       }, 140)
 
-           try {
+      try {
         const result = await analyzeSource(source)
         clearInterval(tick)
         setProgressPct(100)
         setSummary(result.summary)
         onFilled(result.fields)
-        setStep(STEP.MORE)
+        chartSourcesRef.current.push(source)
         addMessage(`I filled in: ${describeFilledFields(result.fields)}.`)
-        addMessage('Want to add another chart for more fields?')
+
+        if (pdfUrl) {
+          // A form's already on hand — fold this chart straight into it
+          // instead of just parking it for later.
+          await applyChartsToForm(pdfUrl)
+        } else {
+          setStep(STEP.MORE)
+          addMessage('Want to add another chart for more fields?')
+        }
       } catch (err) {
         clearInterval(tick)
         console.error('Analysis failed:', err)
@@ -136,7 +221,7 @@ export default function VeraAssistant({
         setStep(STEP.OPENED)
       }
     },
-    [addMessage, onFilled]
+    [addMessage, addImagePreview, onFilled, pdfUrl, applyChartsToForm]
   )
 
   const handleAddPicture = () => fileInputRef.current?.click()
@@ -150,17 +235,29 @@ export default function VeraAssistant({
     reader.readAsDataURL(file)
   }
 
-  // Completely separate from the chart path above — uploading a form
-  // only ever updates the PDF preview, never the web form's fields.
   const handleUploadForm = () => pdfInputRef.current?.click()
 
+  // Uploading a form always means "apply everything I've read so far to
+  // THIS document" — so re-uploading (a fresh copy, or an entirely
+  // different form) resets which charts count as already-applied, and
+  // every chart read this session gets tried against it again from
+  // scratch.
   const handlePdfFileChange = (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    const url = URL.createObjectURL(file)
-    onPdfUploaded(url)
-    addMessage('Your form is loaded — you can see it in the preview on the right.')
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result
+      appliedChartCountRef.current = 0
+      onPdfUploaded(dataUrl)
+      if (chartSourcesRef.current.length > 0) {
+        applyChartsToForm(dataUrl)
+      } else {
+        addMessage('Your form is loaded — you can see it in the preview on the right.')
+      }
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleTakePhoto = async () => {
@@ -212,7 +309,8 @@ export default function VeraAssistant({
     addMessage(answer)
   }
 
-  const handleFillForm = () => {
+  // "I'm done" — nothing left to fill, just move to the save screen.
+  const handleFinish = () => {
     setStep(STEP.DONE)
     addMessage('All done! Your form is ready.')
   }
@@ -240,9 +338,12 @@ export default function VeraAssistant({
     setStep(STEP.OPENED)
     setMessages([{ id: 'm0', text: GREETING }])
     setProgressPct(0)
+    setProgressTitle('Reading your chart…')
     setSummary('')
     setOpenFaq(null)
     idRef.current = 1
+    chartSourcesRef.current = []
+    appliedChartCountRef.current = 0
     onRestartForm()
   }
 
@@ -332,22 +433,24 @@ export default function VeraAssistant({
       </div>
 
       <div className="vera-body" role="log" aria-live="polite" aria-label="Conversation with VERA">
-       {messages.map((m) =>
-  m.image ? (
-    <img
-      key={m.id}
-      src={m.image}
-      alt="Chart you added"
-      className="chat-preview-img"
-      onError={(e) => { e.currentTarget.style.display = 'none' }}
-    />
-  ) : (
-    <div key={m.id} className="bubble">
-      <span className="bubble-label">VERA</span>
-      {m.text}
-    </div>
-  )
-)}
+        {messages.map((m) =>
+          m.image ? (
+            <img
+              key={m.id}
+              src={m.image}
+              alt="Chart you added"
+              className="chat-preview-img"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+              }}
+            />
+          ) : (
+            <div key={m.id} className="bubble">
+              <span className="bubble-label">VERA</span>
+              {m.text}
+            </div>
+          )
+        )}
 
         {step === STEP.OPENED && !isCameraOn && (
           <div className="option-list">
@@ -399,22 +502,6 @@ export default function VeraAssistant({
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
-            <input
-              ref={pdfInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={handlePdfFileChange}
-              className="visually-hidden"
-              aria-label="Upload a form as a PDF"
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="visually-hidden"
-              aria-label="Upload a picture of a chart"
-            />
           </div>
         )}
 
@@ -439,7 +526,7 @@ export default function VeraAssistant({
                   <path d="m20 20-3.5-3.5" />
                 </svg>
               </div>
-              <span className="progress-title">Reading your chart…</span>
+              <span className="progress-title">{progressTitle}</span>
             </div>
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${progressPct}%` }} />
@@ -447,7 +534,8 @@ export default function VeraAssistant({
             <span className="progress-pct">{progressPct}% completed</span>
           </div>
         )}
-                {step === STEP.MORE && (
+
+        {step === STEP.MORE && (
           <div className="option-list">
             <button className="option-btn" onClick={() => setStep(STEP.OPENED)}>
               <span className="option-icon">
@@ -480,7 +568,6 @@ export default function VeraAssistant({
           </div>
         )}
 
-
         {step === STEP.READY && (
           <div className="option-list">
             <button className="option-btn" onClick={handleTellMeAboutIt}>
@@ -507,14 +594,36 @@ export default function VeraAssistant({
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
-            <button className="option-btn" onClick={handleFillForm}>
+            <button className="option-btn" onClick={() => setStep(STEP.OPENED)}>
               <span className="option-icon">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
                 </svg>
               </span>
-              Fill out my form
+              Add another chart
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            <button className="option-btn" onClick={handleUploadForm}>
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 3h6l1 3H8l1-3Z" />
+                  <rect x="5" y="6" width="14" height="15" rx="2" />
+                </svg>
+              </span>
+              Upload form
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            <button className="option-btn" onClick={handleFinish}>
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+              I'm done
               <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 6l6 6-6 6" />
               </svg>
@@ -572,6 +681,28 @@ export default function VeraAssistant({
             </div>
           </>
         )}
+
+        {/* Always mounted regardless of step — "Add a chart picture" (only
+            shown in STEP.OPENED) and "Upload form" (shown in both
+            STEP.OPENED and STEP.READY) both need their file picker
+            available whenever their button is showing, so these can't
+            live inside a step-conditional block. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="visually-hidden"
+          aria-label="Upload a picture of a chart"
+        />
+        <input
+          ref={pdfInputRef}
+          type="file"
+          accept="application/pdf"
+          onChange={handlePdfFileChange}
+          className="visually-hidden"
+          aria-label="Upload a form as a PDF"
+        />
 
         {/* Hidden canvas used only to grab a still frame from the live camera. */}
         <canvas ref={canvasRef} style={{ display: 'none' }} />

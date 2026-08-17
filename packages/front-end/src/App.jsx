@@ -2,8 +2,27 @@ import { useState, useCallback } from 'react'
 import CameraCapture from './components/CameraCapture.jsx'
 import ChatPanel from './components/ChatPanel.jsx'
 import { useSpeech } from './hooks/useSpeech.js'
-import { analyzeChart, askQuestion, DEMO_PIE_SERIES } from './mockApi.js'
+import { analyzeChart, askQuestion, fillForm, DEMO_PIE_SERIES } from './mockApi.js'
 import { generateSampleChartImage } from './utils/sampleChart.js'
+
+// One ChartTask per form_schemas.py's computedAnswer-sourced field — a
+// plain "analyze this chart" call has no task, so computedAnswer always
+// comes back null (see EXTRACTION_SYSTEM_PROMPT step 9). Filling a
+// specific form needs a specific derived figure from the same chart, so
+// handleFillForm below re-runs analysis with the matching task rather
+// than reusing whatever (if anything) came back from the original call.
+const FORM_TASKS = {
+  liheap: {
+    type: 'summary',
+    instruction:
+      'Compute the average monthly energy usage across all months/periods shown in this chart, in kWh (convert to kWh and show the conversion in the formula if the chart uses a different unit)',
+  },
+  stock_basis: {
+    type: 'lookup',
+    instruction:
+      'Find the high and low price on the specified date and average them to get the reportable per-share cost basis',
+  },
+}
 
 /**
  * App — top-level state.
@@ -26,6 +45,11 @@ export default function App() {
   const [description, setDescription] = useState('')
   const [shortDescription, setShortDescription] = useState('')
   const [structuredData, setStructuredData] = useState(null)
+  // The targeted-computation answer (e.g. LIHEAP average monthly usage) —
+  // only present when the analysis included a ChartTask. This is what
+  // gets mapped onto a form's fields by handleFillForm below; if it's
+  // null, there's nothing a worksheet could fill in from the chart.
+  const [computedAnswer, setComputedAnswer] = useState(null)
   const [capturedImage, setCapturedImage] = useState(null) // data URL from camera, upload, or the generated sample chart
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
@@ -54,6 +78,7 @@ export default function App() {
         setDescription(result.description)
         setShortDescription(result.shortDescription)
         setStructuredData(result.structuredData)
+        setComputedAnswer(result.computedAnswer ?? null)
       } catch (err) {
         console.error('Analysis failed:', err)
         // Surface the real reason (e.g. missing API key, Claude API error,
@@ -102,10 +127,57 @@ export default function App() {
     [structuredData]
   )
 
+  // Called by ChatPanel when the user picks a form to fill. Deliberately a
+  // separate call from the original analyzeChart, not a reuse of its
+  // result — matches the backend's /fill-form being its own endpoint/graph
+  // (a chart may get analyzed with no form involved at all), and each form
+  // needs a different derived figure from the same chart, so this re-runs
+  // extraction with a task scoped to exactly what the chosen form needs
+  // rather than assuming the original analysis happened to compute it.
+  const handleFillForm = useCallback(
+    async (formType) => {
+      if (!capturedImage) {
+        throw new Error("Analyze a chart first — there's nothing to fill a form from yet.")
+      }
+
+      const taskDef = FORM_TASKS[formType]
+      let task = { type: taskDef.type, instruction: taskDef.instruction }
+
+      // stock_basis needs a specific date (the date of death) to look up —
+      // that's not something the chart alone can tell us, and it's also
+      // the form's own manual "Date of Death" field, so ask for it once
+      // here rather than guessing a date from the chart.
+      if (formType === 'stock_basis') {
+        const target = window.prompt(
+          'What date of death should the high/low price be looked up for? (e.g. 2019-06-15)'
+        )
+        if (!target) {
+          throw new Error('A date of death is needed to compute the stock basis.')
+        }
+        task = { ...task, target }
+      }
+
+      const result = await analyzeChart(capturedImage, task)
+      if (!result.computedAnswer) {
+        throw new Error("Couldn't compute the figure this form needs from this chart.")
+      }
+      setComputedAnswer(result.computedAnswer)
+
+      return fillForm({
+        formType,
+        computedAnswer: result.computedAnswer,
+        image: capturedImage,
+        extractedSeries: result.structuredData,
+      })
+    },
+    [capturedImage]
+  )
+
   const handleReset = () => {
     setDescription('')
     setShortDescription('')
     setStructuredData(null)
+    setComputedAnswer(null)
     setCapturedImage(null)
   }
 
@@ -146,6 +218,7 @@ export default function App() {
             confidence={structuredData?.confidence}
             uncertainValues={structuredData?.uncertainValues}
             onAskQuestion={handleAskQuestion}
+            onFillForm={handleFillForm}
             isListening={isListening}
             transcript={transcript}
             startListening={startListening}

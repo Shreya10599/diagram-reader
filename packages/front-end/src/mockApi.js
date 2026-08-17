@@ -27,14 +27,19 @@ export const DEMO_PIE_SERIES = [
   { label: 'Other', value: 10 },
 ]
 
-// Real call: POST /analyze-chart  (body: { image: base64String })
+// Real call: POST /analyze-chart  (body: { image: base64String, task?: ChartTask })
 // Sends the captured/uploaded image to the FastAPI backend, which calls
-// Claude Vision and returns { description, shortDescription, structuredData }.
-export async function analyzeChart(imageDataUrl) {
+// Claude Vision and returns { description, shortDescription, structuredData,
+// computedAnswer }. `task` is optional — omit it for a plain description: with
+// no task, the backend always sets computedAnswer to null (see
+// EXTRACTION_SYSTEM_PROMPT step 9). Pass one when you need a specific derived
+// figure, e.g. the form-filling flow re-calls this with a task scoped to
+// exactly the figure the target form needs (see App.jsx's handleFillForm).
+export async function analyzeChart(imageDataUrl, task) {
   const res = await fetch(`${API_BASE_URL}/analyze-chart`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: imageDataUrl }),
+    body: JSON.stringify(task ? { image: imageDataUrl, task } : { image: imageDataUrl }),
   })
 
   if (!res.ok) {
@@ -44,6 +49,26 @@ export async function analyzeChart(imageDataUrl) {
     // whatever this throws.
     const errorBody = await res.json().catch(() => null)
     throw new Error(errorBody?.detail ?? `Chart analysis failed (${res.status})`)
+  }
+
+  return res.json()
+}
+
+// Real call: POST /fill-form  (body: { formType, computedAnswer, image, extractedSeries })
+// Maps a chart's computedAnswer onto a target form's hardcoded field
+// schema and runs validate_mapping (the backend's one agentic step) on
+// each mapped value, returning a worksheet — never auto-submitted
+// anywhere, just filled in for the user to review and copy themselves.
+export async function fillForm({ formType, computedAnswer, image, extractedSeries }) {
+  const res = await fetch(`${API_BASE_URL}/fill-form`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ formType, computedAnswer, image, extractedSeries }),
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.detail ?? `Form filling failed (${res.status})`)
   }
 
   return res.json()

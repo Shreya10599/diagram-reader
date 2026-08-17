@@ -492,6 +492,112 @@ video {
   opacity: 1;
 }
 
+/* Fill-a-worksheet trigger — a row of buttons above the transcript,
+   only rendered once there's a computedAnswer to map (see ChatPanel.jsx). */
+.form-fill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-fill-label {
+  font-size: 0.82rem;
+  color: var(--color-text-dim);
+  width: 100%;
+}
+
+.form-fill-btn {
+  min-height: 38px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+/* Worksheet result — its own message type, reuses the assistant bubble's
+   left-alignment but gets a distinct border so it reads as structured
+   data rather than a chat reply. */
+.message-worksheet {
+  justify-content: flex-start;
+}
+
+.worksheet-bubble {
+  max-width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-primary);
+  border-top-left-radius: 4px;
+}
+
+.worksheet-caution {
+  display: block;
+  margin: 0.2rem 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--color-text-dim);
+}
+
+.worksheet-fields {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.worksheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+}
+
+.worksheet-field-filled {
+  border-color: var(--chart-3);
+}
+
+.worksheet-field-needs_review {
+  border-color: var(--chart-4);
+}
+
+.worksheet-field-manual_required {
+  opacity: 0.95;
+}
+
+.worksheet-field-input {
+  min-height: 40px;
+  padding: 0 0.65rem;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.92rem;
+  font-family: inherit;
+}
+
+.worksheet-field-input::placeholder {
+  color: var(--color-text-dim);
+}
+
+.worksheet-field-note {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+
+.worksheet-download-btn {
+  align-self: flex-start;
+  margin-top: 0.75rem;
+}
+
+.worksheet-summary {
+  display: block;
+  margin-top: 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
 .message-bubble-thinking {
   flex-direction: row;
   align-items: center;
