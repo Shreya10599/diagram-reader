@@ -64,6 +64,7 @@ export default function VeraAssistant({
   onShowAbout,
   fields,
   onFilled,
+  onPdfUploaded,
   onRestartForm,
   speak,
 }) {
@@ -79,6 +80,7 @@ export default function VeraAssistant({
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const fileInputRef = useRef(null)
+  const pdfInputRef = useRef(null)
 
   const addMessage = useCallback(
     (text) => {
@@ -144,6 +146,19 @@ export default function VeraAssistant({
     const reader = new FileReader()
     reader.onload = () => runAnalysis(reader.result)
     reader.readAsDataURL(file)
+  }
+
+  // Completely separate from the chart path above — uploading a form
+  // only ever updates the PDF preview, never the web form's fields.
+  const handleUploadForm = () => pdfInputRef.current?.click()
+
+  const handlePdfFileChange = (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    onPdfUploaded(url)
+    addMessage('Your form is loaded — you can see it in the preview on the right.')
   }
 
   const handleTakePhoto = async () => {
@@ -331,7 +346,7 @@ export default function VeraAssistant({
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
-                        <button className="option-btn" onClick={handleAddPicture}>
+            <button className="option-btn" onClick={handleUploadForm}>
               <span className="option-icon">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 3h6l1 3H8l1-3Z" />
@@ -344,9 +359,17 @@ export default function VeraAssistant({
               </svg>
             </button>
             <input
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={handlePdfFileChange}
+              className="visually-hidden"
+              aria-label="Upload a form as a PDF"
+            />
+            <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,application/pdf"
+              accept="image/*"
               onChange={handleFileChange}
               className="visually-hidden"
               aria-label="Upload a picture of a chart"

@@ -1,24 +1,20 @@
-import VeraLogo from './VeraLogo.jsx'
-
 /**
- * LandingForm — the whole landing page: the big centered VERA mark, and
- * the form VERA is going to fill out. Name/Address/Minimum/Maximum/
- * Average are disabled and empty until `fields` comes in from VERA (see
- * App.jsx) — once filled, Minimum/Maximum/Average switch to the green
- * "AI-filled" styling and every field becomes editable, so the person
- * can review and correct before saving.
+ * LandingForm — the web form VERA fills out: Name/Address/Minimum/
+ * Maximum/Average. Disabled and empty until `fields` comes in from a
+ * chart upload (see App.jsx / VeraAssistant's chart-upload path only —
+ * PDF uploads never touch this) — once filled, Minimum/Maximum/Average
+ * switch to the green "AI-filled" styling and every field becomes
+ * editable, so the person can review and correct before saving.
+ *
+ * The VERA logo + heading used to live here but now sits above the
+ * whole two-column workspace in App.jsx, since this is just one of the
+ * two panels now.
  */
 export default function LandingForm({ fields, onFieldChange }) {
   const filled = Boolean(fields)
 
   return (
-    <>
-      <header className="landing-header">
-        <VeraLogo size={84} />
-        <h1 className="landing-title">VERA</h1>
-      </header>
-
-      <div className="form-panel">
+    <div className="form-panel">
         <div className="form-field">
           <label className="form-label" htmlFor="field-name">
             Name
@@ -105,7 +101,6 @@ export default function LandingForm({ fields, onFieldChange }) {
             The three green fields fill in automatically once VERA reads your chart.
           </p>
         </div>
-      </div>
-    </>
+    </div>
   )
 }
