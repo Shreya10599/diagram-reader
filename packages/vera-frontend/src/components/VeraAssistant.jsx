@@ -64,6 +64,7 @@ export default function VeraAssistant({
   onShowAbout,
   fields,
   onFilled,
+  pdfUrl,
   onPdfUploaded,
   onRestartForm,
   speak,
@@ -213,6 +214,22 @@ export default function VeraAssistant({
   const handleFillForm = () => {
     setStep(STEP.DONE)
     addMessage('All done! Your form is ready.')
+  }
+
+  // Downloads the actual uploaded PDF (not the web form) — that's the
+  // real document; the min/max/average fields are just VERA's reading
+  // of a chart, not something with its own file to save.
+  const handleSaveForm = () => {
+    if (!pdfUrl) {
+      addMessage("There's no uploaded form to save yet — ask me to \"Upload a form\" first.")
+      return
+    }
+    const link = document.createElement('a')
+    link.href = pdfUrl
+    link.download = 'filled-form.pdf'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleBack = () => setStep(STEP.READY)
@@ -496,7 +513,7 @@ export default function VeraAssistant({
 
         {step === STEP.DONE && (
           <>
-            <button className="btn btn-primary btn-full" onClick={() => window.print()}>
+            <button className="btn btn-primary btn-full" onClick={handleSaveForm}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 3v12" />
                 <path d="m7 10 5 5 5-5" />

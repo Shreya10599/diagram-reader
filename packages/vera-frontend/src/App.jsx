@@ -97,6 +97,7 @@ export default function App() {
             onShowAbout={() => setShowAbout(true)}
             fields={fields}
             onFilled={handleFilled}
+            pdfUrl={pdfUrl}
             onPdfUploaded={handlePdfUploaded}
             onRestartForm={handleRestartForm}
             speak={speak}
