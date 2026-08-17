@@ -149,6 +149,11 @@ can read in that case.
 - If the two charts match, return "match": true with an empty "corrections" array.
 - If some values differ, return "match": false and list the corrected value for each \
 mismatched point only.
+- If the extracted table includes an extra point that does not actually appear anywhere in \
+the original chart (e.g. a hallucinated bar past the last real one, or an off-by-one that \
+invented a trailing data point), report a correction for that label with "value": null to \
+mean "remove this point entirely" — do not guess a plausible-looking value for a point that \
+shouldn't exist at all.
 - If any part of the chart is hard to read — cut-off axis labels, ambiguous tick marks, \
 crowded data points — you MAY call the provided tools before answering: zoom_tool(region) \
 crops and upscales a region of the original for a closer look, and re_extract_points(labels) \
@@ -161,13 +166,14 @@ matching exactly this shape:
 
 {
   "match": true | false,
-  "corrections": [ { "label": "<series label>", "value": <number> }, ... ],
+  "corrections": [ { "label": "<series label>", "value": <number> | null }, ... ],
   "notes": "<short summary of what matched or what was corrected, or empty string>"
 }
 
-"value" must always be a plain number. Labels in "corrections" must exactly match the labels \
-in the provided table (case-sensitive) — if you don't recognize a label, leave it out rather \
-than guessing."""
+"value" must be a plain number for a value correction, or null to mean "this point should be \
+removed — it doesn't appear in the original chart." Labels in "corrections" must exactly \
+match the labels in the provided table (case-sensitive) — if you don't recognize a label, \
+leave it out rather than guessing."""
 
 
 VERIFICATION_TOOLS = [
@@ -252,14 +258,29 @@ def get_client() -> Anthropic:
 def _build_user_instruction(task: Optional[ChartTask]) -> str:
     """The system prompt describes the computedAnswer mechanism once and
     stays static (keeps it cache-friendly); the actual task text is
-    per-request, so it's built here instead."""
+    per-request, so it's built here instead.
+
+    full_extraction with an instruction is a distinct case from
+    summary/lookup: those ask for a derived figure computed FROM the
+    extraction (LIHEAP average usage, stock high/low, etc.), so their
+    instruction is framed as "compute this and report it as
+    computedAnswer". full_extraction's instruction instead guides HOW to
+    read/label the series itself — e.g. income_pdf.py's grouped-bar-chart
+    case, where bars need compound "<member> — <period>" labels that no
+    generic chart-reading procedure would produce on its own. Needed once
+    a caller had a real reason to customize extraction-time behavior
+    without asking for any computed figure; previously nothing did, so
+    full_extraction + instruction was just silently ignored."""
     base = "Extract this chart's data following the procedure in your instructions."
-    if task and task.type != "full_extraction" and task.instruction:
-        target_note = f" The specific point of interest is: {task.target}." if task.target else ""
-        base += (
-            f" TASK: {task.instruction}.{target_note} Compute this using the values you "
-            f"extract and report it as the computedAnswer object described in your instructions."
-        )
+    if task and task.instruction:
+        if task.type == "full_extraction":
+            base += f" EXTRACTION NOTE: {task.instruction}"
+        else:
+            target_note = f" The specific point of interest is: {task.target}." if task.target else ""
+            base += (
+                f" TASK: {task.instruction}.{target_note} Compute this using the values you "
+                f"extract and report it as the computedAnswer object described in your instructions."
+            )
     base += " Respond with the JSON object only."
     return base
 
@@ -282,18 +303,53 @@ def _parse_image_data_url(data_url: str) -> tuple[str, str]:
 
 def _extract_json(raw_text: str) -> dict:
     """Claude is instructed to return raw JSON; strip markdown fences defensively in \
-    case it wraps the response in ```json anyway."""
+    case it wraps the response in ```json anyway, and fall back to slicing out the \
+    outermost {...} object in case it prefaces the JSON with a stray sentence despite \
+    being told not to (seen in practice from the verification pass: "The values match \
+    closely enough given chart precision.\\n{...}") — every node (extraction, \
+    verification, re-extract, validate_mapping) funnels through this one function, so \
+    this fix covers all of them."""
     text = raw_text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(json)?", "", text).rstrip("`").strip()
+
     try:
         return json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.error("Failed to parse Claude response as JSON: %s\nRaw: %s", exc, raw_text)
-        raise HTTPException(
-            status_code=502,
-            detail="Claude returned a response that couldn't be parsed as JSON.",
-        )
+    except json.JSONDecodeError:
+        pass
+
+    # Slice out the first balanced {...} object rather than str.rfind("}"),
+    # so a stray brace in trailing prose can't truncate the object early.
+    start = text.find("{")
+    if start != -1:
+        depth = 0
+        end = None
+        for i, ch in enumerate(text[start:], start=start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if end is not None:
+            candidate = text[start : end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError as exc:
+                logger.error(
+                    "Failed to parse extracted JSON candidate: %s\nCandidate: %s", exc, candidate
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="Claude returned a response that couldn't be parsed as JSON.",
+                )
+
+    logger.error("Failed to parse Claude response as JSON (no JSON object found)\nRaw: %s", raw_text)
+    raise HTTPException(
+        status_code=502,
+        detail="Claude returned a response that couldn't be parsed as JSON.",
+    )
 
 
 def _run_extraction(
@@ -511,24 +567,53 @@ def _apply_corrections(
     round_no: int,
 ) -> StructuredData:
     """Merge Claude's corrections into the extracted table by label
-    (case-insensitive); labels the model invented are ignored."""
+    (case-insensitive); labels the model invented are ignored. A
+    correction with value=None means "this point doesn't actually appear
+    in the original chart" — remove it entirely rather than trying to
+    update it to some value.
+
+    A removal is a bigger, harder-to-verify claim than a value correction
+    (the verification pass is asserting a point doesn't exist at all, not
+    just that its value looks off) — and it's just as fallible as any
+    other model judgment: real testing found a case where a removal was
+    later confirmed WRONG (the point did exist). So a removal always
+    downgrades confidence to "low" and gets logged in uncertainValues
+    rather than silently trusted — don't remove that downgrade without
+    something that actually double-checks the removal first."""
     corrected = {c.label.strip().lower(): c.value for c in corrections}
+    removed_labels = {c.label.strip().lower() for c in corrections if c.value is None}
+
     changes = []
+    removed = []
+    updated_series = []
     for point in structured.series:
-        new_value = corrected.get(point.label.strip().lower())
+        key = point.label.strip().lower()
+        if key in removed_labels:
+            removed.append(point.label)
+            continue
+        new_value = corrected.get(key)
         if new_value is not None and new_value != point.value:
             changes.append(f"{point.label}: {point.value} -> {new_value}")
-    updated_series = [
-        SeriesPoint(label=p.label, value=corrected.get(p.label.strip().lower(), p.value))
-        for p in structured.series
-    ]
-
-    if changes:
-        steps.log(
-            f"Applying corrections (round {round_no})",
-            "; ".join(changes),
+        updated_series.append(
+            SeriesPoint(label=point.label, value=new_value if new_value is not None else point.value)
         )
+
+    if changes or removed:
+        summary_parts = []
+        if changes:
+            summary_parts.append("; ".join(changes))
+        if removed:
+            summary_parts.append(f"removed: {', '.join(removed)}")
+        steps.log(f"Applying corrections (round {round_no})", " | ".join(summary_parts))
     else:
         steps.log(f"Applying corrections (round {round_no})", "NO CHANGES — values already match")
-    return structured.model_copy(update={"series": updated_series})
+
+    update: dict = {"series": updated_series}
+    if removed:
+        update["confidence"] = "low"
+        update["uncertainValues"] = list(structured.uncertainValues or []) + [
+            f"{label} (removed by verification pass — unconfirmed, double check the original chart)"
+            for label in removed
+        ]
+    return structured.model_copy(update=update)
 

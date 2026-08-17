@@ -17,6 +17,11 @@ import { useSpeech } from './hooks/useSpeech.js'
  * what keeps the landing form disabled/empty on first load and lets
  * LandingForm switch Minimum/Maximum/Average to the green "AI-filled"
  * style once it's not.
+ *
+ * The "upload the real LIHEAP form and get a filled PDF back" flow (see
+ * VeraAssistant.jsx's runFillFormFromChart) doesn't touch this fixed
+ * form at all — it hands back an actual filled PDF the person downloads
+ * directly, so it needs none of App.jsx's state.
  */
 export default function App() {
   const [fields, setFields] = useState(null)
@@ -59,5 +64,5 @@ export default function App() {
     )}
   </div>
 )
-  
+
 }

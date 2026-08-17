@@ -19,3 +19,10 @@ Pillow>=10.0
 
 # Eval-only — not used by the running app itself, just scripts/eval_accuracy.py
 requests>=2.31
+
+# Runtime: app/income_pdf.py fills a real uploaded LIHEAP PDF's income table
+# and hands back an actual downloadable filled copy — pypdf reads/merges
+# pages, reportlab draws the overlay text (and, for a photo-of-a-form
+# upload, the background image too).
+pypdf>=4.0
+reportlab>=4.0
