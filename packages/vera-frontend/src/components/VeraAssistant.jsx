@@ -5,17 +5,34 @@ import { analyzeSource, askQuestion, fillFormFromChart } from '../mockApi.js'
 const STEP = {
   OPENED: 'opened',
   PROGRESS: 'progress',
+  MORE: 'more',
   READY: 'ready',
   ASK: 'ask',
   DONE: 'done',
 }
+
 
 const ASK_OPTIONS = [
   "What's the highest value?",
   "What's the lowest value?",
   'What does this mean for me?',
 ]
+const FIELD_LABELS = {
+  name: 'Name',
+  address: 'Address',
+  min: 'Minimum value',
+  max: 'Maximum value',
+  average: 'Average',
+}
 
+function describeFilledFields(fieldsObj) {
+  const labels = Object.keys(fieldsObj)
+    .filter((key) => fieldsObj[key])
+    .map((key) => FIELD_LABELS[key] ?? key)
+  if (labels.length <= 1) return labels[0] ?? 'nothing new'
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
+}
 const FAQ = [
   {
     q: 'What file types can I upload?',
@@ -53,7 +70,16 @@ const GREETING = "Hi, I'm VERA. How can I help you today?"
  *     the right table — page 3 or page 5 — ready to download as a real
  *     PDF, not another on-screen worksheet.
  */
-export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, fields, onFilled, onRestartForm, speak }) {
+export default function VeraAssistant({
+  isOpen,
+  onOpenChange,
+  onShowAbout,
+  fields,
+  onFilled,
+  onPdfUploaded,
+  onRestartForm,
+  speak,
+}) {
   const [step, setStep] = useState(STEP.OPENED)
   const [messages, setMessages] = useState([{ id: 'm0', text: GREETING }])
   const [progressPct, setProgressPct] = useState(0)
@@ -77,7 +103,7 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const fileInputRef = useRef(null)
-  const formFileInputRef = useRef(null)
+  const pdfInputRef = useRef(null)
 
   const addMessage = useCallback(
     (text) => {
@@ -87,6 +113,10 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
     },
     [speak]
   )
+    const addImagePreview = useCallback((src) => {
+    const id = `m${idRef.current++}`
+    setMessages((prev) => [...prev, { id, image: src }])
+  }, [])
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -100,6 +130,7 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
 
   const runAnalysis = useCallback(
     async (source) => {
+      addImagePreview(source)
       setStep(STEP.PROGRESS)
       setProgressTitle('Reading your chart…')
       addMessage("Working on it — I'll update you live.")
@@ -111,15 +142,16 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
         setProgressPct((p) => Math.min(p + 7, 92))
       }, 140)
 
-      try {
+           try {
         const result = await analyzeSource(source)
         clearInterval(tick)
         setProgressPct(100)
         setSummary(result.summary)
         setChartSource(source)
         onFilled(result.fields)
-        setStep(STEP.READY)
-        addMessage('Done! What would you like to do now?')
+        setStep(STEP.MORE)
+        addMessage(`I filled in: ${describeFilledFields(result.fields)}.`)
+        addMessage('Want to add another chart for more fields?')
       } catch (err) {
         clearInterval(tick)
         console.error('Analysis failed:', err)
@@ -181,15 +213,17 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
     reader.readAsDataURL(file)
   }
 
-  // Separate input — always the FORM itself (PDF or a photo of one), never
-  // a chart.
-  const handleFormFileChange = (event) => {
+  // Completely separate from the chart path above — uploading a form
+  // only ever updates the PDF preview, never the web form's fields.
+  const handleUploadForm = () => pdfInputRef.current?.click()
+
+  const handlePdfFileChange = (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => runFillFormFromChart(reader.result)
-    reader.readAsDataURL(file)
+    const url = URL.createObjectURL(file)
+    onPdfUploaded(url)
+    addMessage('Your form is loaded — you can see it in the preview on the right.')
   }
 
   const handleTakePhoto = async () => {
@@ -346,12 +380,22 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
       </div>
 
       <div className="vera-body" role="log" aria-live="polite" aria-label="Conversation with VERA">
-        {messages.map((m) => (
-          <div key={m.id} className="bubble">
-            <span className="bubble-label">VERA</span>
-            {m.text}
-          </div>
-        ))}
+       {messages.map((m) =>
+  m.image ? (
+    <img
+      key={m.id}
+      src={m.image}
+      alt="Chart you added"
+      className="chat-preview-img"
+      onError={(e) => { e.currentTarget.style.display = 'none' }}
+    />
+  ) : (
+    <div key={m.id} className="bubble">
+      <span className="bubble-label">VERA</span>
+      {m.text}
+    </div>
+  )
+)}
 
         {step === STEP.OPENED && !isCameraOn && (
           <div className="option-list">
@@ -391,6 +435,34 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
+            <button className="option-btn" onClick={handleUploadForm}>
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 3h6l1 3H8l1-3Z" />
+                  <rect x="5" y="6" width="14" height="15" rx="2" />
+                </svg>
+              </span>
+              Upload a form
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={handlePdfFileChange}
+              className="visually-hidden"
+              aria-label="Upload a form as a PDF"
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="visually-hidden"
+              aria-label="Upload a picture of a chart"
+            />
           </div>
         )}
 
@@ -423,6 +495,39 @@ export default function VeraAssistant({ isOpen, onOpenChange, onShowAbout, field
             <span className="progress-pct">{progressPct}% completed</span>
           </div>
         )}
+                {step === STEP.MORE && (
+          <div className="option-list">
+            <button className="option-btn" onClick={() => setStep(STEP.OPENED)}>
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </span>
+              Yes, add another chart
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            <button
+              className="option-btn"
+              onClick={() => {
+                setStep(STEP.READY)
+                addMessage('Done! What would you like to do now?')
+              }}
+            >
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+              No, I'm done
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+        )}
+
 
         {step === STEP.READY && (
           <div className="option-list">
