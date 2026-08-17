@@ -313,7 +313,7 @@ export default function VeraAssistant({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
               onChange={handleFileChange}
               className="visually-hidden"
               aria-label="Upload a picture of a chart"
