@@ -22,6 +22,7 @@ export default function App() {
   const [fields, setFields] = useState(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [hasStarted, setHasStarted] = useState(false)
 
   const { speak } = useSpeech()
 
@@ -38,20 +39,25 @@ export default function App() {
   }, [])
 
   return (
-    <div className="app-shell">
-      <LandingForm fields={fields} onFieldChange={handleFieldChange} />
-
-      <VeraAssistant
-        isOpen={isChatOpen}
-        onOpenChange={setIsChatOpen}
-        onShowAbout={() => setShowAbout(true)}
-        fields={fields}
-        onFilled={handleFilled}
-        onRestartForm={handleRestartForm}
-        speak={speak}
-      />
-
-      {showAbout && <AboutVera onClose={() => setShowAbout(false)} />}
-    </div>
-  )
+  <div className="app-shell">
+    {!hasStarted ? (
+      <AboutVera onStart={() => setHasStarted(true)} />
+    ) : (
+      <>
+        <LandingForm fields={fields} onFieldChange={handleFieldChange} />
+        <VeraAssistant
+          isOpen={isChatOpen}
+          onOpenChange={setIsChatOpen}
+          onShowAbout={() => setShowAbout(true)}
+          fields={fields}
+          onFilled={handleFilled}
+          onRestartForm={handleRestartForm}
+          speak={speak}
+        />
+        {showAbout && <AboutVera onClose={() => setShowAbout(false)} />}
+      </>
+    )}
+  </div>
+)
+  
 }

@@ -7,7 +7,7 @@ import VeraLogo from './VeraLogo.jsx'
  * purpose: it's meant to read as "you've been taken to a page," not
  * "a tooltip appeared."
  */
-export default function AboutVera({ onClose }) {
+export default function AboutVera({ onClose, onStart }) {
   // Let Escape close it too — this is effectively a full-screen dialog.
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -21,16 +21,19 @@ export default function AboutVera({ onClose }) {
     <div className="about-overlay" role="dialog" aria-label="About VERA">
       <div className="about-inner">
         <div className="about-head">
-          <div className="about-brand">
+                    <div className="about-brand">
             <VeraLogo size={34} />
-            <span className="about-brand-name">VERA</span>
+            <div>
+              <span className="about-brand-name">VERA</span>
+              <span className="about-brand-full">Visual Extraction and Reasoning Assistant</span>
+            </div>
           </div>
-          <button className="btn btn-outline" onClick={onClose}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M6 6l12 12M18 6 6 18" />
-            </svg>
-            Close
-          </button>
+          {onClose && (
+  <button className="btn btn-outline" onClick={onClose}>
+    ...
+    Close
+  </button>
+)}
         </div>
 
         <div className="hero">
@@ -91,6 +94,13 @@ export default function AboutVera({ onClose }) {
             <p className="step-body">Your form is auto-filled and ready to save.</p>
           </div>
         </div>
+        {onStart && (
+  <div className="cta-row" style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
+    <button className="btn btn-primary" onClick={onStart}>
+      Start filling the form now
+    </button>
+  </div>
+)}
       </div>
     </div>
   )

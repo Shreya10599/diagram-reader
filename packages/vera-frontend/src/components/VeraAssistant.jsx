@@ -134,7 +134,7 @@ export default function VeraAssistant({
       setIsCameraOn(true)
     } catch (err) {
       console.error('Camera access failed:', err)
-      addMessage('I couldn’t open your camera — check permissions, or try "Add a picture" instead.')
+      addMessage('I couldn’t open your camera — check permissions, or try "Add a chart picture" instead.')
     }
   }
 
@@ -269,7 +269,7 @@ export default function VeraAssistant({
                   <rect x="3" y="4" width="18" height="16" rx="2" />
                 </svg>
               </span>
-              Add a picture
+              Add a chart picture
               <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 6l6 6-6 6" />
               </svg>
@@ -281,7 +281,7 @@ export default function VeraAssistant({
                   <circle cx="12" cy="13" r="3.5" />
                 </svg>
               </span>
-              Take a photo
+              Take a chart photo
               <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 6l6 6-6 6" />
               </svg>
@@ -293,7 +293,19 @@ export default function VeraAssistant({
                   <path d="M14 11a5 5 0 0 0-7.5-.4l-2 2a5 5 0 0 0 7 7l1.1-1.1" />
                 </svg>
               </span>
-              Add a link
+              Add a chart link
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+                        <button className="option-btn" onClick={handleAddPicture}>
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 3h6l1 3H8l1-3Z" />
+                  <rect x="5" y="6" width="14" height="15" rx="2" />
+                </svg>
+              </span>
+              Upload a form
               <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 6l6 6-6 6" />
               </svg>

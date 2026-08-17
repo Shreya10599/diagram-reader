@@ -311,11 +311,12 @@ input:focus-visible {
 }
 .bubble-label {
   display: block;
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--done-ink);
   margin-bottom: 0.2rem;
+  font-family: Georgia, serif;
 }
 
 .option-list {
@@ -527,6 +528,12 @@ input:focus-visible {
   font-size: 18px;
   font-weight: 900;
   letter-spacing: 0.03em;
+}
+.about-brand-full {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
 }
 
 .hero {
