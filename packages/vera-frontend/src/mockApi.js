@@ -91,10 +91,14 @@ export async function askQuestion(question, fields) {
 }
 
 // Real call: POST /analyze-chart  (body: { image, task? })
-// Used by the "upload any form" flow to compute one specific field's value
-// from a chart, via a ChartTask built from that field's own label — see
-// VeraAssistant.jsx's runCustomFill. Distinct from analyzeSource() above,
-// which always runs the fixed min/max/average VERA task server-side.
+// Lower-level than analyzeSource() above (which always runs the fixed
+// min/max/average VERA task server-side) — this one takes an arbitrary
+// ChartTask, e.g. "compute this specific field's value from this chart."
+// Not currently called by VeraAssistant.jsx — its "Upload form" flow is
+// just a client-side PDF preview now (see PdfPreview.jsx), independent of
+// chart reading entirely. Kept here as a valid wrapper around a real,
+// working backend endpoint in case a future UI needs a single targeted
+// chart computation.
 export async function analyzeChart(image, task) {
   const res = await fetch(`${API_BASE_URL}/analyze-chart`, {
     method: 'POST',
@@ -142,12 +146,12 @@ export async function extractFormSchema(formFile) {
 // Real call: POST /liheap/fill-income-table-pdf
 // (body: { chartImage, formFile }) -> { pdfBase64, rows, summary }
 // `chartImage` is the ONE grouped household-income chart (member x
-// last/this/next month, already read earlier in the session); `formFile`
-// is the LIHEAP form itself (PDF or a photo of one). Returns an actual
-// filled copy of the form's income table as a downloadable PDF, not a
-// JSON worksheet. Superseded in the UI by fillFormFromChart below (which
-// also handles expense charts) — kept working since the backend still
-// exposes it, but VeraAssistant.jsx no longer calls this one directly.
+// last/this/next month); `formFile` is the LIHEAP form itself (PDF or a
+// photo of one). Returns an actual filled copy of the form's income table
+// as a downloadable PDF, not a JSON worksheet. Not currently called by
+// VeraAssistant.jsx — "Upload form" there is a client-side PDF preview
+// now, independent of chart reading (see PdfPreview.jsx) — but the
+// backend endpoint is real and working, for whenever a UI wants it.
 export async function fillIncomeTablePdf({ chartImage, formFile }) {
   const res = await fetch(`${API_BASE_URL}/liheap/fill-income-table-pdf`, {
     method: 'POST',
@@ -167,8 +171,11 @@ export async function fillIncomeTablePdf({ chartImage, formFile }) {
 // The general version of fillIncomeTablePdf above: the chart can be EITHER
 // an income chart or an expenses chart — the backend classifies it and
 // fills page 3 (income) or page 5 (expenses) accordingly. Same two-field
-// request shape, so this is what VeraAssistant.jsx's "Upload form" flow
-// actually calls now.
+// request shape. Not currently called by VeraAssistant.jsx (see the note
+// on fillIncomeTablePdf above — same reason), but this is the one to
+// reach for first if/when the UI wants real PDF-filling back: it
+// subsumes fillIncomeTablePdf's income-only case and also handles
+// expenses.
 export async function fillFormFromChart({ chartImage, formFile }) {
   const res = await fetch(`${API_BASE_URL}/liheap/fill-form-from-chart`, {
     method: 'POST',

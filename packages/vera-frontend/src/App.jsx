@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import LandingForm from './components/LandingForm.jsx'
 import PdfPreview from './components/PdfPreview.jsx'
 import VeraAssistant from './components/VeraAssistant.jsx'
@@ -8,14 +8,19 @@ import { useSpeech } from './hooks/useSpeech.js'
 /**
  * App — top-level state for VERA.
  *
- * Two independent upload flows live side by side once the user has
- * started:
- *   - Chart uploads (picture/photo/link) only ever update `fields`
- *     (the web form on the left, via LandingForm).
- *   - A PDF upload only ever updates `pdfUrl` (the preview on the
- *     right, via PdfPreview).
- * Neither path touches the other's state — see VeraAssistant, where
- * they're wired to two completely separate handlers.
+ * Two panels live side by side once the user has started:
+ *   - `fields` (the web form on the left, via LandingForm) — filled by
+ *     every chart upload, via POST /vera/analyze.
+ *   - `pdfUrl` (the preview on the right, via PdfPreview) — the current
+ *     state of whatever form the person uploaded. It starts as the raw
+ *     file they picked, but once a chart's been read AND a form exists,
+ *     VeraAssistant folds that chart's data straight into it via POST
+ *     /liheap/fill-form-from-chart and replaces `pdfUrl` with the result
+ *     — so it's not a static preview once both a chart and a form are on
+ *     hand, it's the live, iteratively-filled document. `pdfUrl` holds a
+ *     data: URL (not a blob: URL) specifically so it can be handed
+ *     straight back to that endpoint as the next call's `formFile`
+ *     without re-reading anything from disk.
  *
  * VeraAssistant is a floating widget on top of all this — closed it's
  * just the round button, open it's the docked chat panel — so
@@ -32,8 +37,6 @@ export default function App() {
   const [hasStarted, setHasStarted] = useState(false)
 
   const { speak } = useSpeech()
-  const pdfUrlRef = useRef(null)
-  pdfUrlRef.current = pdfUrl
 
   const handleFieldChange = useCallback((key, value) => {
     setFields((prev) => (prev ? { ...prev, [key]: value } : prev))
@@ -46,14 +49,14 @@ export default function App() {
     }))
   }, [])
 
-  const handlePdfUploaded = useCallback((url) => {
-    setPdfUrl(url)
+  // Also used mid-session to swap in the result of a chart just having
+  // been folded into the form — see VeraAssistant.jsx's applyChartsToForm.
+  const handlePdfUploaded = useCallback((dataUrl) => {
+    setPdfUrl(dataUrl)
   }, [])
 
   const handleRestartForm = useCallback(() => {
     setFields(null)
-    // Release the old preview's memory before clearing it.
-    if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current)
     setPdfUrl(null)
   }, [])
 
@@ -97,6 +100,7 @@ export default function App() {
             onShowAbout={() => setShowAbout(true)}
             fields={fields}
             onFilled={handleFilled}
+            pdfUrl={pdfUrl}
             onPdfUploaded={handlePdfUploaded}
             onRestartForm={handleRestartForm}
             speak={speak}
