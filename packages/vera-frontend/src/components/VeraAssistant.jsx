@@ -75,6 +75,7 @@ export default function VeraAssistant({
   const [summary, setSummary] = useState('')
   const [isCameraOn, setIsCameraOn] = useState(false)
   const [openFaq, setOpenFaq] = useState(null)
+  const [transcriptCopied, setTranscriptCopied] = useState(false)
 
   const idRef = useRef(1)
   const videoRef = useRef(null)
@@ -248,6 +249,29 @@ export default function VeraAssistant({
   const handleClose = () => {
     stopCamera()
     onOpenChange(false)
+  }
+
+  // Reads the most recent VERA message aloud again — handy if someone
+  // missed it, or just wants it read rather than reading it themselves.
+  const handleReadAloud = () => {
+    const last = [...messages].reverse().find((m) => m.text)
+    if (last) speak?.(last.text)
+  }
+
+  const handleCopyTranscript = async () => {
+    const text = messages
+      .filter((m) => m.text)
+      .map((m) => `VERA: ${m.text}`)
+      .join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setTranscriptCopied(true)
+      speak?.('Transcript copied')
+      setTimeout(() => setTranscriptCopied(false), 2000)
+    } catch (err) {
+      console.error('Copy failed:', err)
+      addMessage("I couldn't copy the transcript — try again.")
+    }
   }
 
   if (!isOpen) {
@@ -551,6 +575,23 @@ export default function VeraAssistant({
 
         {/* Hidden canvas used only to grab a still frame from the live camera. */}
         <canvas ref={canvasRef} style={{ display: 'none' }} />
+      </div>
+
+      <div className="vera-footer">
+        <button className="vera-footer-btn" onClick={handleReadAloud} aria-label="Read the last message aloud">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+          </svg>
+          Read aloud
+        </button>
+        <button className="vera-footer-btn" onClick={handleCopyTranscript} aria-label="Copy the conversation transcript">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="8" y="3" width="10" height="14" rx="2" />
+            <path d="M6 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1" />
+          </svg>
+          {transcriptCopied ? 'Copied!' : 'Copy transcript'}
+        </button>
       </div>
     </div>
   )
