@@ -31,8 +31,11 @@ export default function App() {
   }, [])
 
   const handleFilled = useCallback((newFields) => {
-    setFields(newFields)
-  }, [])
+  setFields((prev) => ({
+    ...(prev ?? { name: '', address: '', min: '', max: '', average: '' }),
+    ...newFields,
+  }))
+}, [])
 
   const handleRestartForm = useCallback(() => {
     setFields(null)

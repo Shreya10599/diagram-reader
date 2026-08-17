@@ -5,17 +5,34 @@ import { analyzeSource, askQuestion } from '../mockApi.js'
 const STEP = {
   OPENED: 'opened',
   PROGRESS: 'progress',
+  MORE: 'more',
   READY: 'ready',
   ASK: 'ask',
   DONE: 'done',
 }
+
 
 const ASK_OPTIONS = [
   "What's the highest value?",
   "What's the lowest value?",
   'What does this mean for me?',
 ]
+const FIELD_LABELS = {
+  name: 'Name',
+  address: 'Address',
+  min: 'Minimum value',
+  max: 'Maximum value',
+  average: 'Average',
+}
 
+function describeFilledFields(fieldsObj) {
+  const labels = Object.keys(fieldsObj)
+    .filter((key) => fieldsObj[key])
+    .map((key) => FIELD_LABELS[key] ?? key)
+  if (labels.length <= 1) return labels[0] ?? 'nothing new'
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
+}
 const FAQ = [
   {
     q: 'What file types can I upload?',
@@ -94,14 +111,15 @@ export default function VeraAssistant({
         setProgressPct((p) => Math.min(p + 7, 92))
       }, 140)
 
-      try {
+           try {
         const result = await analyzeSource(source)
         clearInterval(tick)
         setProgressPct(100)
         setSummary(result.summary)
         onFilled(result.fields)
-        setStep(STEP.READY)
-        addMessage('Done! What would you like to do now?')
+        setStep(STEP.MORE)
+        addMessage(`I filled in: ${describeFilledFields(result.fields)}.`)
+        addMessage('Want to add another chart for more fields?')
       } catch (err) {
         clearInterval(tick)
         console.error('Analysis failed:', err)
@@ -350,6 +368,39 @@ export default function VeraAssistant({
             <span className="progress-pct">{progressPct}% completed</span>
           </div>
         )}
+                {step === STEP.MORE && (
+          <div className="option-list">
+            <button className="option-btn" onClick={() => setStep(STEP.OPENED)}>
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </span>
+              Yes, add another chart
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            <button
+              className="option-btn"
+              onClick={() => {
+                setStep(STEP.READY)
+                addMessage('Done! What would you like to do now?')
+              }}
+            >
+              <span className="option-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+              No, I'm done
+              <svg className="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+        )}
+
 
         {step === STEP.READY && (
           <div className="option-list">
