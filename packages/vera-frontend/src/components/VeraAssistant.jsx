@@ -88,6 +88,10 @@ export default function VeraAssistant({
     },
     [speak]
   )
+    const addImagePreview = useCallback((src) => {
+    const id = `m${idRef.current++}`
+    setMessages((prev) => [...prev, { id, image: src }])
+  }, [])
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -101,6 +105,7 @@ export default function VeraAssistant({
 
   const runAnalysis = useCallback(
     async (source) => {
+      addImagePreview(source)
       setStep(STEP.PROGRESS)
       addMessage("Working on it — I'll update you live.")
       setProgressPct(8)
@@ -271,12 +276,22 @@ export default function VeraAssistant({
       </div>
 
       <div className="vera-body" role="log" aria-live="polite" aria-label="Conversation with VERA">
-        {messages.map((m) => (
-          <div key={m.id} className="bubble">
-            <span className="bubble-label">VERA</span>
-            {m.text}
-          </div>
-        ))}
+       {messages.map((m) =>
+  m.image ? (
+    <img
+      key={m.id}
+      src={m.image}
+      alt="Chart you added"
+      className="chat-preview-img"
+      onError={(e) => { e.currentTarget.style.display = 'none' }}
+    />
+  ) : (
+    <div key={m.id} className="bubble">
+      <span className="bubble-label">VERA</span>
+      {m.text}
+    </div>
+  )
+)}
 
         {step === STEP.OPENED && !isCameraOn && (
           <div className="option-list">
