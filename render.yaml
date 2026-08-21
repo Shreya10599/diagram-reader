@@ -1,0 +1,46 @@
+# Render Blueprint for the whole app — both the FastAPI backend
+# (packages/back-end) and the Vite/React frontend (packages/vera-frontend)
+# deploy from this one file. Deploy via Render's dashboard: New -> Blueprint
+# -> select this repo -> Render reads this file and proposes both services
+# below. Env vars marked sync: false are never stored in this file or the
+# repo — Render prompts you to type them into its dashboard at deploy time.
+#
+# Order of operations the first time:
+#   1. Deploy the blueprint. vera-backend gets a URL like
+#      https://vera-backend.onrender.com — copy it.
+#   2. In the vera-frontend service's dashboard settings, set
+#      VITE_API_BASE_URL to that URL and trigger a redeploy (Vite bakes env
+#      vars in at build time, so this needs a rebuild, not just a restart).
+#   3. Copy vera-frontend's own URL (e.g. https://vera-frontend.onrender.com)
+#      and set it as vera-backend's ALLOWED_ORIGINS, then redeploy the
+#      backend too — this is the CORS allowlist from app/main.py.
+
+services:
+  - type: web
+    name: vera-backend
+    runtime: python
+    rootDir: packages/back-end
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5
+
+  - type: web
+    name: vera-frontend
+    runtime: static
+    rootDir: packages/vera-frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
