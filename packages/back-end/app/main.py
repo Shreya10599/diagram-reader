@@ -1,4 +1,5 @@
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,17 +30,24 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Diagram Reader API")
 
-# Dev CORS: Vite serves packages/front-end on 5173 and packages/vera-frontend
-# on 5174 (see vera-frontend/vite.config.js) — both allowed so either can hit
-# this backend during dev. Tighten this before deploying.
+# CORS origins: the two Vite dev ports (packages/front-end on 5173,
+# packages/vera-frontend on 5174 — see vera-frontend/vite.config.js) are
+# always allowed so local dev keeps working unchanged. In production, set
+# ALLOWED_ORIGINS to a comma-separated list of the deployed frontend
+# origin(s) — e.g. "https://vera-frontend.vercel.app" — as an env var on
+# whatever host runs this (Render, etc.). No code change/redeploy needed to
+# add or change an allowed origin later.
+_dev_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
+_prod_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=_dev_origins + _prod_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
