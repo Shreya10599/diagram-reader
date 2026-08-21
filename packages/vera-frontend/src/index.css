@@ -359,6 +359,33 @@ input:focus-visible {
   flex: 1;
 }
 
+.vera-footer {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.vera-footer-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0.5rem 0.5rem;
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--ink);
+}
+.vera-footer-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .bubble {
   font-size: 13px;
   line-height: 1.55;
